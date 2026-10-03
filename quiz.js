@@ -90,9 +90,103 @@ const QZ = (() => {
   const anById = Object.fromEntries(ANIONS.map((a) => [a.id, a]));
   const flById = Object.fromEntries(FLAMES.map((f) => [f.id, f]));
 
-  const catFact = (c) => `<b>${c.ion}</b> (${c.name}). Aqueous sodium hydroxide: ${c.naoh}. Aqueous ammonia: ${c.nh3 || 'no test'}.`;
-  const anFact = (a) => `<b>${a.ion}</b> (${a.name}). Test: ${a.test}. Result: ${a.result}.`;
-  const flFact = (f) => `<b>${f.ion}</b> (${f.name}) gives a <b>${f.colour}</b> flame.`;
+  /* ── picture language ──
+     Stripes = the solid stays (precipitate insoluble in excess, or an insoluble salt).
+       Diagonal stripes for aqueous sodium hydroxide, horizontal for aqueous ammonia.
+     Coloured border with a clear middle = a precipitate formed and then dissolved in excess
+       (or a soluble salt). A filled middle is the colour of the solution left behind.
+     Dashed outline = no precipitate. Bubbles = a gas is given off. */
+  const PC = { white: '#f2f2ee', cream: '#e9d7a2', yellow: '#f1cf2f', green: '#56b04f', lightblue: '#8fd0f5', redbrown: '#c0592f', darkblue: '#2f55e0', brown: '#8a5a2b', purple: '#a24fd0' };
+  const CAT_VIS = {
+    al: { naoh: { k: 'dissolve', p: 'white' }, nh3: { k: 'stay', p: 'white' } },
+    nh4: { naoh: { k: 'gas', g: 'NH<sub>3</sub>' }, nh3: null },
+    ca: { naoh: { k: 'stay', p: 'white' }, nh3: { k: 'none' } },
+    cr: { naoh: { k: 'dissolve', p: 'green' }, nh3: { k: 'stay', p: 'green' } },
+    cu: { naoh: { k: 'stay', p: 'lightblue' }, nh3: { k: 'dissolve', p: 'lightblue', s: 'darkblue' } },
+    fe2: { naoh: { k: 'stay', p: 'green', top: 'brown' }, nh3: { k: 'stay', p: 'green', top: 'brown' } },
+    fe3: { naoh: { k: 'stay', p: 'redbrown' }, nh3: { k: 'stay', p: 'redbrown' } },
+    zn: { naoh: { k: 'dissolve', p: 'white' }, nh3: { k: 'dissolve', p: 'white' } },
+  };
+  const AN_VIS = {
+    co3: { v: { k: 'gas', g: 'CO<sub>2</sub>' }, tag: 'dilute acid', cap: 'fizzes: CO<sub>2</sub>' },
+    cl: { v: { k: 'stay', p: 'white' }, tag: 'AgNO<sub>3</sub>', cap: 'white ppt.' },
+    br: { v: { k: 'stay', p: 'cream' }, tag: 'AgNO<sub>3</sub>', cap: 'cream ppt.' },
+    i: { v: { k: 'stay', p: 'yellow' }, tag: 'AgNO<sub>3</sub>', cap: 'yellow ppt.' },
+    no3: { v: { k: 'gas', g: 'NH<sub>3</sub>' }, tag: 'NaOH + Al foil', cap: 'NH<sub>3</sub> gas' },
+    so4: { v: { k: 'stay', p: 'white' }, tag: 'Ba(NO<sub>3</sub>)<sub>2</sub>', cap: 'white ppt.' },
+    so3: { v: { k: 'decolour', p: 'purple' }, tag: 'acidified KMnO<sub>4</sub>', cap: 'purple → colourless' },
+  };
+  const FL_HEX = { li: '#d8312c', na: '#f2c21b', k: '#b48ad8', ca: '#f0743a', ba: '#9bd56b', cu: '#2fb5a2' };
+
+  function tube(v, reagent, size) {
+    const sz = size ? ` qzv-${size}` : '';
+    if (!v) return `<span class="qzv-tube qzv-blank${sz}" role="img" aria-label="no test"></span>`;
+    const st = [];
+    if (v.p) st.push(`--pc:${PC[v.p]}`);
+    if (v.s) st.push(`--sc:${PC[v.s]}`);
+    if (v.top) st.push(`--tc:${PC[v.top]}`);
+    const cls = ['qzv-tube', `qzv-${v.k}`, reagent ? `qzv-${reagent}` : 'qzv-gen', v.s ? 'qzv-sol' : '', v.top ? 'qzv-top' : ''].filter(Boolean).join(' ') + sz;
+    let inner = '';
+    if (v.k === 'gas') inner = '<svg viewBox="0 0 64 40" aria-hidden="true"><circle cx="14" cy="28" r="4"/><circle cx="26" cy="18" r="3"/><circle cx="38" cy="27" r="5"/><circle cx="50" cy="15" r="3.5"/><circle cx="22" cy="8" r="2.5"/><circle cx="44" cy="6" r="2"/></svg>';
+    if (v.k === 'decolour') inner = '<b aria-hidden="true">→</b>';
+    const aria = { stay: 'precipitate stays', dissolve: v.s ? 'precipitate dissolves, coloured solution' : 'precipitate dissolves', none: 'no precipitate', gas: 'gas given off', decolour: 'colour disappears', part: 'partially soluble' }[v.k];
+    return `<span class="${cls}" style="${st.join(';')}" role="img" aria-label="${aria}">${inner}</span>`;
+  }
+  function tubeCap(v) {
+    if (!v) return 'no test';
+    if (v.k === 'stay') return v.top ? 'stays, browns on top' : 'ppt. stays';
+    if (v.k === 'dissolve') return v.s ? 'dissolves: dark blue' : 'dissolves';
+    if (v.k === 'none') return 'no ppt.';
+    if (v.k === 'gas') return `${v.g} gas`;
+    return '';
+  }
+  function catVisual(c) {
+    const V = CAT_VIS[c.id];
+    const fig = (v, r, tag) => `<figure class="qzv-fig"><figcaption class="qzv-tag qzv-tag-${r}">${tag}</figcaption>${tube(v, r)}<span class="qzv-cap">${tubeCap(v)}</span></figure>`;
+    return `<div class="qzv-pair">${fig(V.naoh, 'naoh', 'NaOH')}${fig(V.nh3, 'nh3', 'NH<sub>3</sub>')}</div>`;
+  }
+  function anVisual(a) {
+    const V = AN_VIS[a.id];
+    return `<div class="qzv-pair"><figure class="qzv-fig"><figcaption class="qzv-tag">${V.tag}</figcaption>${tube(V.v, null)}<span class="qzv-cap">${V.cap}</span></figure></div>`;
+  }
+  const SOL_COLS = [['nak', 'Na<sup>+</sup> K<sup>+</sup><br>NH<sub>4</sub><sup>+</sup>'], ['ag', 'Ag<sup>+</sup>'], ['pb', 'Pb<sup>2+</sup>'], ['ba', 'Ba<sup>2+</sup>'], ['ca', 'Ca<sup>2+</sup>'], ['oth', 'most<br>others']];
+  // S soluble, I insoluble, P partially soluble, '' not covered by the six rules
+  const SOL_GRID = [
+    ['b', 'Nitrates', 'NO<sub>3</sub><sup>−</sup>', ['S', 'S', 'S', 'S', 'S', 'S']],
+    ['c', 'Chlorides', 'Cl<sup>−</sup>', ['S', 'I', 'I', 'S', 'S', 'S']],
+    ['d', 'Sulfates', 'SO<sub>4</sub><sup>2−</sup>', ['S', '', 'I', 'I', 'I', 'S']],
+    ['e', 'Carbonates', 'CO<sub>3</sub><sup>2−</sup>', ['S', 'I', 'I', 'I', 'I', 'I']],
+    ['f', 'Hydroxides', 'OH<sup>−</sup>', ['S', '', 'I', '', 'P', 'I']],
+  ];
+  function solCell(x) {
+    if (x === 'S') return tube({ k: 'dissolve', p: 'white' }, null, 'sm');
+    if (x === 'I') return tube({ k: 'stay', p: 'white' }, null, 'sm');
+    if (x === 'P') return tube({ k: 'part', p: 'white' }, null, 'sm');
+    return '<span class="qzv-dash" aria-label="not covered">–</span>';
+  }
+  function solGridHTML(highlightRow) {
+    return `<div class="ov-wrap qzv-gridwrap"><table class="qzv-grid"><thead><tr><th></th>${SOL_COLS.map(([, h]) => `<th scope="col">${h}</th>`).join('')}</tr></thead><tbody>
+      ${SOL_GRID.map(([key, name, ion, cells]) => `<tr class="${highlightRow === key ? 'hl' : ''}"><th scope="row">${name}<small>${ion}</small></th>${cells.map((x, i) => `<td class="${highlightRow === 'a' && i === 0 ? 'hl' : ''}">${solCell(x)}</td>`).join('')}</tr>`).join('')}
+    </tbody></table></div>`;
+  }
+  function legendHTML(kind) {
+    const item = (t, label) => `<li>${t}<span>${label}</span></li>`;
+    if (kind === 'sol') {
+      return `<ul class="qzv-legend">${item(tube({ k: 'dissolve', p: 'white' }, null, 'sm'), 'soluble')}${item(tube({ k: 'stay', p: 'white' }, null, 'sm'), 'insoluble')}${item(tube({ k: 'part', p: 'white' }, null, 'sm'), 'partially soluble')}${item('<span class="qzv-dash">–</span>', 'not in the rules')}</ul>`;
+    }
+    return `<ul class="qzv-legend">
+      ${item(tube({ k: 'stay', p: 'white' }, 'naoh', 'sm'), 'ppt. stays in excess NaOH')}
+      ${item(tube({ k: 'stay', p: 'white' }, 'nh3', 'sm'), 'ppt. stays in excess NH<sub>3</sub>')}
+      ${item(tube({ k: 'dissolve', p: 'white' }, null, 'sm'), 'ppt. dissolves in excess')}
+      ${item(tube({ k: 'dissolve', p: 'lightblue', s: 'darkblue' }, null, 'sm'), 'filled: colour of the solution')}
+      ${item(tube({ k: 'none' }, null, 'sm'), 'no ppt.')}
+      ${item(tube({ k: 'gas', g: '' }, null, 'sm'), 'gas given off')}
+    </ul>`;
+  }
+
+  const catFact = (c) => `<div class="qzv-fact"><div class="qzv-txt"><b>${c.ion}</b> (${c.name}). Aqueous sodium hydroxide: ${c.naoh}. Aqueous ammonia: ${c.nh3 || 'no test'}.</div>${catVisual(c)}</div>`;
+  const anFact = (a) => `<div class="qzv-fact"><div class="qzv-txt"><b>${a.ion}</b> (${a.name}). Test: ${a.test}. Result: ${a.result}.</div>${anVisual(a)}</div>`;
+  const flFact = (f) => `<div class="qzv-fact"><div class="qzv-txt"><b>${f.ion}</b> (${f.name}) gives a <b>${f.colour}</b> flame.</div><span class="qzv-flame qzv-flame-lg" style="--fc:${FL_HEX[f.id]}" aria-hidden="true"></span></div>`;
 
   for (const c of CATIONS) {
     add(`cat-naoh-${c.id}`, 'cat', () => ({
@@ -120,7 +214,7 @@ const QZ = (() => {
       'Both white ppts. dissolve in excess.',
       'Both white ppts. stay in excess.',
     ]),
-    explain: `${catFact(catById.al)}<br>${catFact(catById.zn)}`,
+    explain: `${catFact(catById.al)}${catFact(catById.zn)}`,
   }));
   add('cat-pair-fe', 'cat', () => ({
     prompt: 'How does aqueous sodium hydroxide tell Fe<sup>2+</sup> from Fe<sup>3+</sup>?',
@@ -129,7 +223,7 @@ const QZ = (() => {
       'Fe<sup>2+</sup> ppt. dissolves in excess; Fe<sup>3+</sup> ppt. does not.',
       'Both give a green ppt.; only Fe<sup>3+</sup> turns brown on standing.',
     ]),
-    explain: `${catFact(catById.fe2)}<br>${catFact(catById.fe3)}`,
+    explain: `${catFact(catById.fe2)}${catFact(catById.fe3)}`,
   }));
   add('cat-pair-crfe', 'cat', () => ({
     prompt: 'Cr<sup>3+</sup> and Fe<sup>2+</sup> both give a green ppt. with aqueous sodium hydroxide. What tells them apart?',
@@ -138,12 +232,12 @@ const QZ = (() => {
       'In excess aqueous ammonia, the Fe<sup>2+</sup> ppt. dissolves but the Cr<sup>3+</sup> ppt. does not.',
       'Nothing: they can only be told apart with a flame test.',
     ]),
-    explain: `${catFact(catById.cr)}<br>${catFact(catById.fe2)}`,
+    explain: `${catFact(catById.cr)}${catFact(catById.fe2)}`,
   }));
   add('cat-pair-white', 'cat', () => ({
     prompt: 'Ca<sup>2+</sup>, Al<sup>3+</sup> and Zn<sup>2+</sup> all give a white ppt. with aqueous sodium hydroxide. Which ppt. does <b>not</b> dissolve in excess?',
     ...mcq('Ca<sup>2+</sup>', ['Al<sup>3+</sup>', 'Zn<sup>2+</sup>', 'All three dissolve']),
-    explain: `${catFact(catById.ca)}<br>${catFact(catById.al)}<br>${catFact(catById.zn)}`,
+    explain: `${catFact(catById.ca)}${catFact(catById.al)}${catFact(catById.zn)}`,
   }));
   add('cat-match-colour', 'cat', () => ({
     type: 'match',
@@ -220,14 +314,14 @@ const QZ = (() => {
     add(`sol-rule-${key}`, 'sol', () => ({
       prompt: q,
       ...mcq(right, wrong),
-      explain: `Rule: ${RULES[key]}`,
+      explain: `Rule: ${RULES[key]}${solGridHTML(key)}`,
     }));
   }
   for (const [id, name, ans, rule] of COMPOUNDS) {
     add(`sol-c-${id}`, 'sol', () => ({
       prompt: `Is <b>${name}</b> soluble in water?`,
       options: [S, I, P].map((o) => ({ html: o, correct: o === ans })),
-      explain: `${name.charAt(0).toUpperCase() + name.slice(1)} is <b>${ans.toLowerCase()}</b>. Rule: ${RULES[rule]}`,
+      explain: `<div class="qzv-fact"><div class="qzv-txt">${name.charAt(0).toUpperCase() + name.slice(1)} is <b>${ans.toLowerCase()}</b>. Rule: ${RULES[rule]}</div>${tube({ k: ans === S ? 'dissolve' : ans === I ? 'stay' : 'part', p: 'white' }, null)}</div>`,
     }));
   }
 
@@ -258,7 +352,7 @@ const QZ = (() => {
     return { options: shuffle(opts) };
   }
 
-  return { CARDS, BY_ID, TOPICS, NEW_ORDER, CATIONS, ANIONS, FLAMES, RULES, GAS_TESTS, shuffle };
+  return { CARDS, BY_ID, TOPICS, NEW_ORDER, CATIONS, ANIONS, FLAMES, RULES, GAS_TESTS, shuffle, catVisual, anVisual, solGridHTML, legendHTML, FL_HEX };
 })();
 
 /* ───────────── scheduling ───────────── */
@@ -378,20 +472,24 @@ function qzSheetHTML() {
       <button data-act="qz-jump" data-to="qzs-cat">Cations</button><button data-act="qz-jump" data-to="qzs-an">Anions</button><button data-act="qz-jump" data-to="qzs-fl">Flame tests</button><button data-act="qz-jump" data-to="qzs-sol">Solubility</button>
     </nav>
     <h4 id="qzs-cat">Tests for aqueous cations</h4>
-    <ul class="qz-list">${QZ.CATIONS.map((c) => `<li>
-      <p class="qz-ion">${c.ion} <small>${c.name}</small></p>
+    ${QZ.legendHTML('cat')}
+    <ul class="qz-list">${QZ.CATIONS.map((c) => `<li class="qz-vcard">
+      <div class="qz-vtop"><p class="qz-ion">${c.ion} <small>${c.name}</small></p>${QZ.catVisual(c)}</div>
       <dl><dt>Aqueous sodium hydroxide</dt><dd>${c.naoh}</dd><dt>Aqueous ammonia</dt><dd>${c.nh3 || '–'}</dd></dl>
     </li>`).join('')}</ul>
     <h4 id="qzs-an">Tests for anions</h4>
-    <ul class="qz-list">${QZ.ANIONS.map((a) => `<li>
-      <p class="qz-ion">${a.ion} <small>${a.name}</small></p>
+    <ul class="qz-list">${QZ.ANIONS.map((a) => `<li class="qz-vcard">
+      <div class="qz-vtop"><p class="qz-ion">${a.ion} <small>${a.name}</small></p>${QZ.anVisual(a)}</div>
       <dl><dt>Test</dt><dd>${a.test}</dd><dt>Result</dt><dd>${a.result}</dd></dl>
     </li>`).join('')}</ul>
     <p class="fine">Gas tests used above: carbon dioxide turns limewater milky; ammonia turns damp red litmus paper blue.</p>
     <h4 id="qzs-fl">Flame tests</h4>
-    <ul class="qz-flames">${QZ.FLAMES.map((f) => `<li><i style="background:${FLAME_SWATCH[f.id]}" aria-hidden="true"></i><span class="qz-ion">${f.ion} <small>${f.name}</small></span><b>${f.colour}</b></li>`).join('')}</ul>
+    <ul class="qz-flames">${QZ.FLAMES.map((f) => `<li><i class="qzv-flame" style="--fc:${FLAME_SWATCH[f.id]}" aria-hidden="true"></i><span class="qz-ion">${f.ion} <small>${f.name}</small></span><b>${f.colour}</b></li>`).join('')}</ul>
     <p class="fine">The colour dots are only a memory aid. In the exam, use the colour words exactly as listed.</p>
     <h4 id="qzs-sol">Solubility rules for salts</h4>
+    ${QZ.legendHTML('sol')}
+    ${QZ.solGridHTML()}
+    <p class="fine">“Most others” means salts of other metals, such as copper(II), iron or zinc. A dash means the six rules don’t cover it.</p>
     <ol class="qz-rules">${Object.values(QZ.RULES).map((r) => `<li>${r}</li>`).join('')}</ol>
   </div>`;
 }
