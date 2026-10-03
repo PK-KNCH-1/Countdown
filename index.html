@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Countdown</title>
+<meta name="description" content="IGCSE Feb/March 2027 revision tracker">
+<meta name="theme-color" content="#12161C" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#EEF1F0" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Countdown">
+<meta name="referrer" content="no-referrer">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Apply the theme before first paint so the page never flashes the wrong colours.
+  (function () {
+    try {
+      var t = JSON.parse(localStorage.getItem('cd.theme') || '"dark"');
+      if (t === 'auto') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-in">
+    <div class="hero-top">
+      <button class="wordmark" data-act="go" data-tab="stats">Countdown</button>
+      <div class="hero-tools">
+        <button class="sync-pill" id="syncPill" data-act="go" data-tab="data" aria-label="Sync status"></button>
+        <button class="theme-toggle" data-act="theme-toggle" aria-label="Switch between light and dark">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" /></svg>
+        </button>
+      </div>
+    </div>
+    <div class="hero-body" id="heroBody"></div>
+  </div>
+</header>
+
+<nav class="tabs" aria-label="Sections">
+  <div class="tabs-in">
+    <button data-act="go" data-tab="stats" class="tab">Stats</button>
+    <button data-act="go" data-tab="calendar" class="tab">Calendar</button>
+    <button data-act="go" data-tab="goals" class="tab">Goals</button>
+    <button data-act="go" data-tab="targets" class="tab">Targets</button>
+    <button data-act="go" data-tab="data" class="tab">Backup</button>
+  </div>
+</nav>
+
+<main id="main">
+  <section class="view" id="v-stats" data-view="stats" aria-label="Stats"></section>
+  <section class="view" id="v-calendar" data-view="calendar" aria-label="Calendar" hidden></section>
+  <section class="view" id="v-goals" data-view="goals" aria-label="Goals" hidden></section>
+  <section class="view" id="v-targets" data-view="targets" aria-label="Targets" hidden></section>
+  <section class="view" id="v-data" data-view="data" aria-label="Sync and backup" hidden></section>
+</main>
+
+
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<div id="sheetRoot"></div>
+<input type="file" id="importFile" accept="application/json,.json" hidden>
+
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script src="sync.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
