@@ -320,6 +320,26 @@ td.off .ovc { cursor: pointer; }
 /* ───────── chemistry quiz ───────── */
 
 body.qz-focus #heroBody { display: none; }
+.qz-sheetcard { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.qz-sheetcard > div { flex: 1 1 220px; min-width: 0; }
+.qz-sheetcard .fine { margin-bottom: 0; }
+.qz-top .link { white-space: nowrap; }
+.qz-jump { position: sticky; top: -18px; z-index: 2; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 4px -18px 0; padding: 8px 18px; background: var(--surface); border-bottom: 1px solid var(--line-soft); }
+.qz-jump::-webkit-scrollbar { display: none; }
+.qz-jump button { flex: none; min-height: 32px; padding: 0 12px; border-radius: 20px; border: 1px solid var(--line); background: var(--surface-2); font-size: 12.5px; font-weight: 600; }
+.qz-sheet h4 { scroll-margin-top: 56px; }
+.qz-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.qz-list li { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+.qz-ion { margin: 0 0 6px; font-weight: 700; font-size: 15px; }
+.qz-ion small { font-weight: 400; color: var(--ink-2); font-size: 12.5px; margin-left: 4px; }
+.qz-list dl { margin: 0; display: grid; gap: 2px; }
+.qz-list dt { font-size: 11.5px; font-weight: 600; color: var(--ink-2); margin-top: 4px; }
+.qz-list dd { margin: 0; font-size: 13.5px; line-height: 1.4; }
+.qz-flames { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.qz-flames li { display: grid; grid-template-columns: 18px 1fr; grid-template-areas: "dot ion" "dot col"; column-gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); }
+.qz-flames i { grid-area: dot; width: 18px; height: 18px; border-radius: 50%; }
+.qz-flames .qz-ion { grid-area: ion; margin: 0; font-size: 14px; }
+.qz-flames b { grid-area: col; font-size: 13.5px; }
 body.qz-focus .hero { padding-bottom: 12px; }
 
 .qz-mini .qz-mini-t { margin: 4px 0 10px; font-size: 14px; }

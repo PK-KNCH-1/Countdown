@@ -353,9 +353,9 @@ function renderQuiz() {
     <section class="block qz-today">
       ${left
         ? `<p class="qz-big"><b>${left}</b> question${left === 1 ? '' : 's'} today</p><p class="fine">${due ? `${due} to review` : 'Nothing to review yet'}${fresh ? `, ${fresh} new` : ''}. About ${Math.max(2, Math.round(left * 0.3))} minutes.</p>
-           <button class="btn primary" data-act="qz-start">${today && today.n ? 'Continue today’s quiz' : 'Start today’s quiz'}</button>`
+           <div class="btn-row"><button class="btn primary" data-act="qz-start">${today && today.n ? 'Continue today’s quiz' : 'Start today’s quiz'}</button><button class="btn" data-act="qz-sheet">Cheat sheet</button></div>`
         : `<p class="qz-big"><b>Done</b> for today</p><p class="fine">${today ? `${today.c} of ${today.n} right today. ` : ''}${unseen ? `${unseen} questions you haven’t seen yet.` : 'You’ve seen every question.'}</p>
-           <button class="btn" data-act="qz-more">Practise 10 more</button>`}
+           <div class="btn-row"><button class="btn" data-act="qz-more">Practise 10 more</button><button class="btn" data-act="qz-sheet">Cheat sheet</button></div>`}
       <div class="qz-streakrow"><span class="qz-streak">${streak ? `${streak}-day streak` : 'Finish today’s quiz to start a streak'}</span>
         <span class="qz-days" aria-label="Last 14 days">${last14.map((d) => { const r = state.qdays[d]; return `<i class="${r && r.done ? 'on' : r && r.n ? 'part' : ''}${d === todayISO() ? ' today' : ''}" title="${fmtDate(d)}${r ? `: ${r.c}/${r.n}` : ''}"></i>`; }).join('')}</span></div>
     </section>
@@ -364,30 +364,43 @@ function renderQuiz() {
       <p class="fine">“Secure” means answered right at least three times in a row, with days in between.</p>
       <ul class="tpapers">${Object.entries(QZ.TOPICS).map(([t, name]) => { const m = qzMastery(t); return `<li><span>${name}</span><span class="tp-bar" aria-hidden="true"><i style="width:${(m.secure / m.total) * 100}%;background:hsl(${CHEM_HUE} 60% 50%)"></i></span><span class="tp-n"><b>${m.secure}</b>/${m.total}</span></li>`; }).join('')}</ul>
     </section>
-    <section class="block">
-      <button class="qz-sheet-h" data-act="qz-sheet" aria-expanded="${!!ui.qzSheet}"><h3 class="h">Cheat sheet</h3><span>${ui.qzSheet ? 'Hide' : 'Show'}</span></button>
-      ${ui.qzSheet ? qzSheetHTML() : '<p class="fine">All four tables, word for word from the syllabus. Read it before your first quiz.</p>'}
+    <section class="block qz-sheetcard">
+      <div><h3 class="h">Cheat sheet</h3><p class="fine">All four tables, word for word from the syllabus. Read it before your first quiz.</p></div>
+      <button class="btn" data-act="qz-sheet">Open cheat sheet</button>
     </section>`;
 }
 
+const FLAME_SWATCH = { li: '#d8312c', na: '#f2c21b', k: '#b48ad8', ca: '#f0743a', ba: '#9bd56b', cu: '#2fb5a2' };
+
 function qzSheetHTML() {
   return `<div class="qz-sheet">
-    <h4>Tests for aqueous cations</h4>
-    <div class="ov-wrap"><table class="qz-t"><thead><tr><th>Cation</th><th>Aqueous sodium hydroxide</th><th>Aqueous ammonia</th></tr></thead><tbody>
-      ${QZ.CATIONS.map((c) => `<tr><th>${c.ion} <small>${c.name}</small></th><td>${c.naoh}</td><td>${c.nh3 || '–'}</td></tr>`).join('')}
-    </tbody></table></div>
-    <h4>Tests for anions</h4>
-    <div class="ov-wrap"><table class="qz-t"><thead><tr><th>Anion</th><th>Test</th><th>Result</th></tr></thead><tbody>
-      ${QZ.ANIONS.map((a) => `<tr><th>${a.ion} <small>${a.name}</small></th><td>${a.test}</td><td>${a.result}</td></tr>`).join('')}
-    </tbody></table></div>
-    <p class="fine">Gas tests used here: carbon dioxide turns limewater milky; ammonia turns damp red litmus paper blue.</p>
-    <h4>Flame tests</h4>
-    <div class="ov-wrap"><table class="qz-t"><thead><tr><th>Metal ion</th><th>Flame colour</th></tr></thead><tbody>
-      ${QZ.FLAMES.map((f) => `<tr><th>${f.ion} <small>${f.name}</small></th><td>${f.colour}</td></tr>`).join('')}
-    </tbody></table></div>
-    <h4>Solubility rules for salts</h4>
+    <nav class="qz-jump" aria-label="Jump to">
+      <button data-act="qz-jump" data-to="qzs-cat">Cations</button><button data-act="qz-jump" data-to="qzs-an">Anions</button><button data-act="qz-jump" data-to="qzs-fl">Flame tests</button><button data-act="qz-jump" data-to="qzs-sol">Solubility</button>
+    </nav>
+    <h4 id="qzs-cat">Tests for aqueous cations</h4>
+    <ul class="qz-list">${QZ.CATIONS.map((c) => `<li>
+      <p class="qz-ion">${c.ion} <small>${c.name}</small></p>
+      <dl><dt>Aqueous sodium hydroxide</dt><dd>${c.naoh}</dd><dt>Aqueous ammonia</dt><dd>${c.nh3 || '–'}</dd></dl>
+    </li>`).join('')}</ul>
+    <h4 id="qzs-an">Tests for anions</h4>
+    <ul class="qz-list">${QZ.ANIONS.map((a) => `<li>
+      <p class="qz-ion">${a.ion} <small>${a.name}</small></p>
+      <dl><dt>Test</dt><dd>${a.test}</dd><dt>Result</dt><dd>${a.result}</dd></dl>
+    </li>`).join('')}</ul>
+    <p class="fine">Gas tests used above: carbon dioxide turns limewater milky; ammonia turns damp red litmus paper blue.</p>
+    <h4 id="qzs-fl">Flame tests</h4>
+    <ul class="qz-flames">${QZ.FLAMES.map((f) => `<li><i style="background:${FLAME_SWATCH[f.id]}" aria-hidden="true"></i><span class="qz-ion">${f.ion} <small>${f.name}</small></span><b>${f.colour}</b></li>`).join('')}</ul>
+    <p class="fine">The colour dots are only a memory aid. In the exam, use the colour words exactly as listed.</p>
+    <h4 id="qzs-sol">Solubility rules for salts</h4>
     <ol class="qz-rules">${Object.values(QZ.RULES).map((r) => `<li>${r}</li>`).join('')}</ol>
   </div>`;
+}
+
+function qzSheetModalHTML() {
+  return `<div class="sheet-h"><h2 id="sheetTitle">Cheat sheet</h2><button class="icon-btn" data-act="sheet-close" aria-label="Close">×</button></div>
+    <p class="fine">From the Cambridge IGCSE Chemistry 0620 syllabus, 2026–2028. “ppt.” means precipitate.</p>
+    ${qzSheetHTML()}
+    <div class="sheet-f"><button class="btn" data-act="sheet-close">Close</button></div>`;
 }
 
 function qzSessionHTML(Q) {
@@ -413,6 +426,7 @@ function qzSessionHTML(Q) {
   }
   return `<div class="qz-top">
       <button class="link" data-act="qz-stop">Stop for now</button>
+      <button class="link" data-act="qz-sheet">Cheat sheet</button>
       <span class="qz-prog" aria-hidden="true"><i style="width:${pct}%"></i></span>
       <span class="qz-count">${Q.i + 1} of ${total}</span>
     </div>
@@ -527,7 +541,12 @@ function quizClick(el, act, d) {
       render();
       break;
     case 'qz-home': ui.qz = null; render(); break;
-    case 'qz-sheet': ui.qzSheet = !ui.qzSheet; renderQuiz(); break;
+    case 'qz-sheet': ui.sheet = { kind: 'qzsheet' }; renderSheet(); break;
+    case 'qz-jump': {
+      const t = document.getElementById(d.to);
+      if (t) t.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      break;
+    }
     default: break;
   }
 }

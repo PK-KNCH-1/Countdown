@@ -982,6 +982,7 @@ function renderSheet() {
   let inner = '';
   if (S.kind === 'day') inner = daySheetHTML(S);
   else if (S.kind === 'import') inner = importSheetHTML(S);
+  else if (S.kind === 'qzsheet') inner = qzSheetModalHTML();
   root.innerHTML = `<div class="sheet-bg" data-act="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">${inner}</div></div>`;
   setupWheels(root);
   const first = root.querySelector('.sheet [autofocus]') || root.querySelector('.sheet h2');

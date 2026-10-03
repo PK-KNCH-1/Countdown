@@ -1,8 +1,8 @@
 /* Countdown service worker: keeps the app usable offline.
    App files: network first, falling back to the saved copy.
    Fonts: saved copy first. Sync calls are never cached. */
-const VERSION = 'countdown-v3';
-const SHELL = ['./', 'index.html', 'style.css', 'data.js', 'sync.js', 'quiz.js', 'app.js', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png'];
+const VERSION = 'countdown-v4';
+const SHELL = ['./', 'index.html', 'style.css?v=4', 'data.js?v=4', 'sync.js?v=4', 'quiz.js?v=4', 'app.js?v=4', 'config.js?v=4', 'manifest.webmanifest', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -27,11 +27,11 @@ self.addEventListener('fetch', (e) => {
   }
   if (url.origin !== self.location.origin) return;
   e.respondWith(
-    fetch(req)
+    fetch(req, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); }
         return res;
       })
-      .catch(() => caches.match(req, { ignoreSearch: true }).then((hit) => hit || caches.match('index.html')))
+      .catch(() => caches.match(req).then((hit) => hit || caches.match(req, { ignoreSearch: true })).then((hit) => hit || caches.match('index.html')))
   );
 });
