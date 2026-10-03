@@ -309,6 +309,14 @@ h3 { font-size: 15px; margin: 0; font-weight: 600; }
 .dot.recent { box-shadow: 0 0 0 1.5px var(--surface), 0 0 0 3px var(--accent); }
 .hatch { display: block; width: 28px; height: 18px; margin: 4px auto; border-radius: 4px; background: repeating-linear-gradient(135deg, var(--line) 0 2px, transparent 2px 6px); }
 
+td.off .ovc { cursor: pointer; }
+.offmark { display: block; width: 14px; height: 2px; border-radius: 1px; background: var(--line); margin: 0 auto; }
+.yr.off:not(.on) { opacity: 0.45; border-style: dashed; }
+.ser.off:not(.on) { opacity: 0.55; }
+.tiles.off .tile { opacity: 0.6; border-style: dashed; }
+.off-note { margin-top: 10px; }
+.tg-now { margin: 10px 0 0; }
+
 /* ───────── activity charts ───────── */
 
 .chart-head { display: flex; align-items: center; justify-content: space-between; margin: 12px 0 4px; }

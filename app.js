@@ -284,7 +284,7 @@ function subjStats(sId) {
   for (const p of SUBJ[sId].papers) {
     const sp = `${sId}_${p.id}`;
     const t = targetOf(sp), d = doneOf(sp);
-    target += t; done += Math.min(d, t); raw += d;
+    target += t; done += Math.min(d, t); raw += derived.doneBySp[sp] || 0;
     per.push({ p, t, d });
   }
   const scores = Object.entries(state.lib)
@@ -405,8 +405,8 @@ function renderStats() {
     syncBannerHTML(),
     overallHTML(),
     goalsStatsHTML(),
-    subjectsHTML(),
     overviewHTML(),
+    subjectsHTML(),
     activityHTML(),
     examsHTML(),
     PREVIEW ? '' : `<div class="print-row"><button class="btn" data-act="print">Print or save as PDF</button></div>`,
@@ -516,17 +516,19 @@ function defaultLibPos(sId) {
   return { y: 2025, ser: ser ? ser.id : 'MJ' };
 }
 
-function yearsHTML(sId, sel, act, countFn) {
+function yearsHTML(sId, sel, act, countFn, tsel) {
   return `<div class="years" role="group" aria-label="Year">${YEARS.map((y) => {
     const n = countFn(y);
-    return `<button type="button" class="yr${y === sel ? ' on' : ''}" data-act="${act}" data-y="${y}" aria-pressed="${y === sel}">${y}${n ? `<small>${n}</small>` : ''}</button>`;
+    const off = tsel && !tsel.years.includes(y);
+    return `<button type="button" class="yr${y === sel ? ' on' : ''}${off ? ' off' : ''}" data-act="${act}" data-y="${y}" aria-pressed="${y === sel}"${off ? ' title="Not in your target"' : ''}>${y}${n ? `<small>${n}</small>` : ''}</button>`;
   }).join('')}</div>`;
 }
 
-function seriesHTML(sId, sel, act) {
+function seriesHTML(sId, sel, act, tsel) {
   return `<div class="series" role="group" aria-label="Series">${SERIES.map((x) => {
     const ok = seriesOffered(sId, x.id);
-    return `<button type="button" class="ser${x.id === sel ? ' on' : ''}" data-act="${act}" data-ser="${x.id}" ${ok ? '' : 'disabled'} aria-pressed="${x.id === sel}">${x.name}</button>`;
+    const off = ok && tsel && !tsel.series.includes(x.id);
+    return `<button type="button" class="ser${x.id === sel ? ' on' : ''}${off ? ' off' : ''}" data-act="${act}" data-ser="${x.id}" ${ok ? '' : 'disabled'} aria-pressed="${x.id === sel}">${x.name}</button>`;
   }).join('')}</div>`;
 }
 
@@ -548,22 +550,29 @@ function libHTML(sId) {
   const L = ui.lib;
   const s = SUBJ[sId];
   const st = subjStats(sId);
+  const tsel = targetSel(sId);
   const countYear = (y) => Object.entries(state.lib).filter(([k, r]) => r.done && parseKey(k).s === sId && parseKey(k).y === y).length;
   const ser = SERIES_BY_ID[L.ser];
+  const here = inTarget(tsel, L.y, L.ser);
   const blocks = s.papers.map((p) => {
     const vs = variants(sId, L.ser, p.id);
     if (!vs.length) return `<div class="pblock"><p class="pname">Paper ${p.n} <span>${esc(p.name)}</span></p><p class="na-note">Not set in ${ser.name}.</p></div>`;
     const keys = vs.map((v) => pkey(sId, p.id, L.y, L.ser, v));
     const formHere = ui.form && ui.form.ctx === 'lib' && keys.includes(ui.form.key);
     return `<div class="pblock"><p class="pname">Paper ${p.n} <span>${esc(p.name)}</span></p>
-      <div class="tiles">${keys.map((k) => tileHTML(k, { ctx: 'lib' })).join('')}</div>
+      <div class="tiles${here ? '' : ' off'}">${keys.map((k) => tileHTML(k, { ctx: 'lib' })).join('')}</div>
       ${formHere ? formHTML(ui.form.key) : ''}</div>`;
   }).join('');
+  const outside = st.raw - st.done;
+  const headline = tsel
+    ? `<b>${st.done}</b> of ${st.target} in your target (${esc(selSummary(tsel))})${outside > 0 ? `, plus ${outside} outside it` : ''}`
+    : `<b>${st.done}</b> of ${st.target} target`;
   return `<div class="lib" style="--sc:${col(sId).bg}">
-    <div class="lib-head"><p>${st.raw} logged${st.avg != null ? `, average ${Math.round(st.avg)}%, best ${st.best}%` : ''}</p>
+    <div class="lib-head"><p>${headline}${st.avg != null ? `. Average ${Math.round(st.avg)}%, best ${st.best}%.` : '.'}</p>
       <button class="link" data-act="lib-close">Close</button></div>
-    ${yearsHTML(sId, L.y, 'lib-year', countYear)}
-    ${seriesHTML(sId, L.ser, 'lib-ser')}
+    ${yearsHTML(sId, L.y, 'lib-year', countYear, tsel)}
+    ${seriesHTML(sId, L.ser, 'lib-ser', tsel)}
+    ${here ? '' : `<p class="na-note off-note">${ser.name} ${L.y} isn’t in your ${esc(s.name)} target. You can still record papers here; they just don’t count toward the percentage.</p>`}
     <div class="pblocks">${blocks}</div>
   </div>`;
 }
@@ -606,17 +615,44 @@ function formHTML(key) {
   </form>`;
 }
 
+function inTarget(sel, y, ser) {
+  return !sel || (sel.years.includes(y) && sel.series.includes(ser));
+}
+
+function commonSel() {
+  const counts = {};
+  let best = null, bestN = 0;
+  for (const sub of SUBJECTS) {
+    const sel = targetSel(sub.id);
+    if (!sel) continue;
+    const key = JSON.stringify({ y: sel.years.slice().sort(), s: SERIES.map((x) => x.id).filter((id) => sel.series.includes(id)) });
+    counts[key] = (counts[key] || 0) + 1;
+    if (counts[key] > bestN) { bestN = counts[key]; best = sel; }
+  }
+  return best ? { sel: best, all: bestN === SUBJECTS.length } : null;
+}
+
 function overviewHTML() {
-  let minY = 2020;
-  for (const k of Object.keys(state.lib)) minY = Math.min(minY, parseKey(k).y);
-  const years = YEARS.filter((y) => y >= minY);
+  const sels = Object.fromEntries(SUBJECTS.map((s) => [s.id, targetSel(s.id)]));
+  const ySet = new Set();
+  let anySel = false;
+  for (const sel of Object.values(sels)) if (sel) { anySel = true; sel.years.forEach((y) => ySet.add(y)); }
+  if (!anySel || Object.values(sels).some((x) => !x)) {
+    // Subjects with hand-set numbers have no year range, so show every year they've touched too.
+    let minY = 2020;
+    for (const k of Object.keys(state.lib)) minY = Math.min(minY, parseKey(k).y);
+    YEARS.filter((y) => y >= minY).forEach((y) => ySet.add(y));
+  }
+  const years = YEARS.filter((y) => ySet.has(y));
   const head1 = years.map((y) => `<th colspan="3" scope="colgroup">${y}</th>`).join('');
   const head2 = years.map(() => SERIES.map((x) => `<th scope="col" title="${x.long}">${SER_SHORT[x.id]}</th>`).join('')).join('');
   const body = SUBJECTS.map((s) => s.papers.map((p, pi) => {
     const c = col(s.id, p.id);
+    const sel = sels[s.id];
     const cells = years.map((y) => SERIES.map((x) => {
       const vs = variants(s.id, x.id, p.id);
       if (!vs.length) return `<td class="na" title="Not offered"><span class="hatch" aria-label="Not offered"></span></td>`;
+      if (!inTarget(sel, y, x.id)) return `<td class="off" title="Not in your target"><button class="ovc" data-act="ov" data-s="${s.id}" data-y="${y}" data-ser="${x.id}" aria-label="${esc(`${s.name} Paper ${p.n}, ${x.long} ${y}: not in your target`)}"><span class="offmark" aria-hidden="true"></span></button></td>`;
       const dots = vs.map((v) => {
         const k = pkey(s.id, p.id, y, x.id, v);
         const on = state.lib[k] && state.lib[k].done;
@@ -627,9 +663,11 @@ function overviewHTML() {
     }).join('')).join('');
     return `<tr class="${pi === 0 ? 'grp' : ''}"><th scope="row">${swatch(s.id, p.id)}${s.code} ${p.n}</th>${cells}</tr>`;
   }).join('')).join('');
+  const cs = commonSel();
+  const scope = cs && cs.all ? `Showing your target: ${selSummary(cs.sel)}.` : 'Showing the years in your targets.';
   return `<section class="block">
     <h2 class="h">Completion overview</h2>
-    <p class="fine">One dot per variant. Filled means done. Striped means that series doesn’t set the paper. Tap any cell to open it.</p>
+    <p class="fine">${esc(scope)} One dot per variant, filled when done. Stripes mean Cambridge didn’t set that paper; a dash means it’s outside that subject’s target. Tap any cell to open it.</p>
     <div class="ov-wrap" tabindex="0" aria-label="Completion overview, scrolls sideways"><table class="ov"><thead><tr><th></th>${head1}</tr><tr><th></th>${head2}</tr></thead><tbody>${body}</tbody></table></div>
   </section>`;
 }
@@ -1218,8 +1256,15 @@ function presetYears(p) {
 
 function renderTargets() {
   const el = $('#v-targets');
-  const G = ui.tglobal || (ui.tglobal = { years: DEFAULT_SEL.years.slice(), series: DEFAULT_SEL.series.slice() });
+  if (!ui.tglobal) {
+    const cs = commonSel();
+    const base = cs ? cs.sel : DEFAULT_SEL;
+    ui.tglobal = { years: base.years.slice(), series: base.series.slice() };
+  }
+  const G = ui.tglobal;
   const gTotal = SUBJECTS.reduce((a, s) => a + s.papers.reduce((b, p) => b + countIn(s.id, p.id, G), 0), 0);
+  const nowTotal = ALL_SP.reduce((a, sp) => a + targetOf(sp), 0);
+  const cs = commonSel();
   el.innerHTML = `
     <div class="view-head"><h2 class="h">Targets</h2></div>
     <p class="fine">Pick the years and series you want to cover. Each target is every paper Cambridge actually set in them, so ICT practicals and Tamil come out smaller on their own. Every percentage in the app is measured against these.</p>
@@ -1227,7 +1272,8 @@ function renderTargets() {
       <h3 class="h">Set every subject at once</h3>
       <p class="tlabel">Years</p>${yearPickHTML(G.years, 'tg-year')}${presetsHTML('tg-preset')}
       <p class="tlabel">Series</p>${seriesPickHTML(G.series, 'tg-ser')}
-      <div class="tg-apply"><button class="btn primary" data-act="tg-apply">Apply to all subjects</button><span>${gTotal} papers in total</span></div>
+      <div class="tg-apply"><button class="btn primary" data-act="tg-apply">Apply to all subjects</button><span>${gTotal} papers with this choice</span></div>
+      <p class="fine tg-now">Your targets now: <b>${nowTotal} papers</b>${cs && cs.all ? `, ${esc(selSummary(cs.sel))} for every subject` : ', set per subject below'}.</p>
     </section>
     ${SUBJECTS.map((s) => targetSubjectHTML(s)).join('')}`;
 }

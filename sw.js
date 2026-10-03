@@ -1,7 +1,7 @@
 /* Countdown service worker: keeps the app usable offline.
    App files: network first, falling back to the saved copy.
    Fonts: saved copy first. Sync calls are never cached. */
-const VERSION = 'countdown-v1';
+const VERSION = 'countdown-v2';
 const SHELL = ['./', 'index.html', 'style.css', 'data.js', 'sync.js', 'app.js', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
