@@ -317,6 +317,72 @@ td.off .ovc { cursor: pointer; }
 .off-note { margin-top: 10px; }
 .tg-now { margin: 10px 0 0; }
 
+/* ───────── chemistry quiz ───────── */
+
+body.qz-focus #heroBody { display: none; }
+body.qz-focus .hero { padding-bottom: 12px; }
+
+.qz-mini .qz-mini-t { margin: 4px 0 10px; font-size: 14px; }
+.qz-streak { font-size: 12.5px; font-weight: 600; color: var(--accent); }
+:root:not([data-theme="dark"]) .qz-streak { color: var(--ink-2); }
+.qz-bars { display: grid; gap: 6px; margin-bottom: 12px; }
+.qz-bars div { display: grid; grid-template-columns: 112px 1fr; align-items: center; gap: 10px; font-size: 12.5px; color: var(--ink-2); }
+.qz-big { margin: 2px 0 2px; font-size: 15px; color: var(--ink-2); }
+.qz-big b { font-family: var(--font-display); font-size: 34px; font-weight: 700; color: var(--ink); margin-right: 6px; }
+.qz-streakrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.qz-days { display: flex; gap: 4px; }
+.qz-days i { width: 14px; height: 14px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--line); }
+.qz-days i.part { background: color-mix(in srgb, var(--accent) 35%, var(--surface)); border-color: var(--accent); }
+.qz-days i.on { background: var(--accent); border-color: var(--accent); }
+.qz-days i.today { outline: 1.5px solid var(--ink); outline-offset: 1px; }
+.qz-sheet-h { width: 100%; display: flex; align-items: center; justify-content: space-between; background: none; border: 0; padding: 0; text-align: left; }
+.qz-sheet-h span { font-size: 13px; font-weight: 600; color: var(--accent); }
+:root:not([data-theme="dark"]) .qz-sheet-h span { color: var(--ink); text-decoration: underline; }
+.qz-sheet h4 { font-family: var(--font-display); font-size: 14.5px; font-weight: 600; margin: 16px 0 6px; }
+.qz-t { border-collapse: collapse; font-size: 12.5px; min-width: 520px; }
+.qz-t th, .qz-t td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid var(--line-soft); }
+.qz-t thead th { color: var(--ink-2); font-weight: 600; font-size: 11.5px; }
+.qz-t tbody th { white-space: nowrap; font-weight: 700; }
+.qz-t tbody th small { display: block; font-weight: 400; color: var(--ink-2); }
+.qz-rules { margin: 6px 0 0; padding-left: 20px; font-size: 13.5px; display: grid; gap: 4px; }
+
+.qz-top { display: flex; align-items: center; gap: 12px; margin: 14px 0 6px; }
+.qz-prog { flex: 1; height: 8px; border-radius: 5px; background: var(--line); overflow: hidden; }
+.qz-prog i { display: block; height: 100%; background: var(--accent); border-radius: 5px; transition: width 0.3s ease; }
+.qz-count { font-size: 12.5px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.qz-card { padding: 16px; }
+.qz-topic { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--accent); }
+:root:not([data-theme="dark"]) .qz-topic { color: var(--ink-2); }
+.qz-q { font-size: 16px; font-weight: 600; line-height: 1.45; margin: 0 0 14px; }
+.qz-q i { font-style: normal; color: var(--ink-2); }
+.qz-opts { display: grid; gap: 8px; }
+.qz-opt {
+  width: 100%; text-align: left; padding: 12px 14px; min-height: 48px; border-radius: var(--radius);
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font-size: 14.5px; line-height: 1.4;
+}
+.qz-opt:active:not(:disabled) { transform: scale(0.99); }
+.qz-opt.right { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 16%, var(--surface)); }
+.qz-opt.wrong { border-color: var(--exam-ink); background: color-mix(in srgb, var(--exam-ink) 14%, var(--surface)); }
+.qz-opt:disabled { cursor: default; }
+.qz-opt:disabled:not(.right):not(.wrong) { opacity: 0.55; }
+.qz-fb { margin-top: 12px; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface-2); font-size: 13.5px; }
+.qz-fb b { display: block; margin-bottom: 4px; font-size: 14px; }
+.qz-fb.right b { color: var(--ok); }
+.qz-fb.wrong b { color: var(--exam-ink); }
+.qz-fb p { margin: 0; color: var(--ink); }
+.qz-next { margin-top: 12px; width: 100%; }
+.qz-match { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 10px; }
+.qz-col { display: grid; gap: 8px; align-content: start; }
+.qz-m { min-height: 46px; padding: 8px 10px; border-radius: var(--radius); border: 1.5px solid var(--line); background: var(--surface); text-align: left; font-size: 14px; }
+.qz-m.sel { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.qz-m.ok { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, var(--surface)); opacity: 0.8; }
+.qz-m.bad { border-color: var(--exam-ink); animation: shake 0.3s ease; }
+@keyframes shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+.qz-review { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 10px; }
+.qz-review li { padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); font-size: 13.5px; }
+.qz-review p { margin: 0; }
+.qz-review .qz-ans { margin-top: 6px; color: var(--ink-2); }
+
 /* ───────── activity charts ───────── */
 
 .chart-head { display: flex; align-items: center; justify-content: space-between; margin: 12px 0 4px; }
@@ -622,4 +688,10 @@ td.off .ovc { cursor: pointer; }
   .ov-wrap { overflow: visible; margin: 0; padding: 0; }
   .ov { font-size: 8.5px; }
   .day { min-height: 64px; }
+}
+
+@media (max-width: 430px) {
+  .tabs { padding: 10px 10px; }
+  .tabs-in { gap: 2px; }
+  .tab { padding: 8px 9px; font-size: 13.5px; }
 }

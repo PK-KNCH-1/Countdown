@@ -108,7 +108,7 @@ const swatch = (sId, pId) => `<i class="sw" style="background:${col(sId, pId).bg
 
 /* ───────────── state, rebuilt from the record store ───────────── */
 
-let state = { entries: {}, targets: {}, lib: {}, goals: {}, tsel: {} };
+let state = { entries: {}, targets: {}, lib: {}, goals: {}, tsel: {}, quiz: {}, qdays: {} };
 let derived = { doneBySp: {}, keysBySp: {}, recentKey: null };
 
 function applyRec(k, v) {
@@ -118,6 +118,8 @@ function applyRec(k, v) {
   else if (kind === 'p') { if (v == null) delete state.lib[rest]; else state.lib[rest] = v; }
   else if (kind === 'g') { if (v == null) delete state.goals[rest]; else state.goals[rest] = v; }
   else if (kind === 'ts') { if (v == null) delete state.tsel[rest]; else state.tsel[rest] = v; }
+  else if (kind === 'q') { if (v == null) delete state.quiz[rest]; else state.quiz[rest] = v; }
+  else if (kind === 'qd') { if (v == null) delete state.qdays[rest]; else state.qdays[rest] = v; }
   else if (kind === 'e') {
     const j = rest.indexOf('/');
     const date = rest.slice(0, j), cell = rest.slice(j + 1);
@@ -133,7 +135,7 @@ function applyRec(k, v) {
 }
 
 function rebuild() {
-  state = { entries: {}, targets: {}, lib: {}, goals: {}, tsel: {} };
+  state = { entries: {}, targets: {}, lib: {}, goals: {}, tsel: {}, quiz: {}, qdays: {} };
   for (const [k, r] of Object.entries(Store.rec)) if (r && r.v !== null) applyRec(k, r.v);
   derive();
 }
@@ -353,19 +355,21 @@ function render(opts = {}) {
   if (v === 'stats') renderStats();
   else if (v === 'calendar') renderCalendar();
   else if (v === 'goals') renderGoals();
+  else if (v === 'quiz') renderQuiz();
   else if (v === 'targets') renderTargets();
   else if (v === 'data') renderData();
 }
 
 function renderAll() {
   renderChrome();
-  renderStats(); renderCalendar(); renderGoals(); renderTargets(); renderData();
+  renderStats(); renderCalendar(); renderQuiz(); renderGoals(); renderTargets(); renderData();
 }
 
 function renderChrome() {
   $$('.view').forEach((el) => { el.hidden = el.dataset.view !== ui.tab; });
   $$('.tab').forEach((b) => b.setAttribute('aria-current', b.dataset.tab === ui.tab ? 'page' : 'false'));
   $('#heroBody').innerHTML = heroHTML();
+  document.body.classList.toggle('qz-focus', ui.tab === 'quiz' && !!(ui.qz && ui.qz.active));
   renderSyncPill();
 }
 
@@ -404,6 +408,7 @@ function renderStats() {
   el.innerHTML = [
     syncBannerHTML(),
     overallHTML(),
+    quizStatsHTML(),
     goalsStatsHTML(),
     overviewHTML(),
     subjectsHTML(),
@@ -1455,6 +1460,8 @@ function exportJSON() {
     entries: state.entries,
     targets: Object.fromEntries(ALL_SP.map((sp) => [sp, targetOf(sp)])),
     targetSelection: state.tsel,
+    quiz: state.quiz,
+    quizDays: state.qdays,
     paperLibrary: state.lib,
     goals: Object.values(state.goals),
     lastBackup: new Date().toISOString(),
@@ -1519,6 +1526,8 @@ function readImport(obj) {
     if (r.markedAt) rec.markedAt = Number(r.markedAt);
     recs[`p/${k}`] = rec;
   }
+  for (const [id, r] of Object.entries(obj.quiz || {})) if (QZ.BY_ID[id] && r && typeof r === 'object') recs[`q/${id}`] = r;
+  for (const [d, r] of Object.entries(obj.quizDays || {})) if (/^\d{4}-\d{2}-\d{2}$/.test(d) && r && typeof r === 'object') recs[`qd/${d}`] = r;
   const goals = Array.isArray(obj.goals) ? obj.goals : Object.values(obj.goals || {});
   for (const g of goals) {
     if (!g || !g.id) continue;
@@ -1967,7 +1976,9 @@ document.addEventListener('click', (ev) => {
         toast('All data erased.');
       }, 'Tap again to erase everything');
       break;
-    default: break;
+    default:
+      if (act.startsWith('qz-')) quizClick(el, act, d);
+      break;
   }
 });
 
