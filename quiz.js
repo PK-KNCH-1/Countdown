@@ -413,23 +413,6 @@ function qzMastery(topic) {
 
 const CHEM_HUE = 20;
 
-function quizStatsHTML() {
-  const left = qzTodayQueue().length;
-  const today = state.qdays[todayISO()];
-  const streak = qzStreak();
-  const doneToday = today && today.done && left === 0;
-  const anySeen = Object.keys(state.quiz).length > 0;
-  const body = doneToday
-    ? `<p class="qz-mini-t"><b>Done for today.</b> ${today.c} of ${today.n} right.</p>`
-    : `<p class="qz-mini-t"><b>${left} question${left === 1 ? '' : 's'}</b> waiting today${anySeen ? '' : ', starting with the basics'}.</p>`;
-  return `<section class="block qz-mini">
-    <div class="block-h"><h2 class="h">Chemistry quiz</h2><span class="qz-streak">${streak ? `${streak}-day streak` : 'No streak yet'}</span></div>
-    ${body}
-    <div class="qz-bars">${Object.entries(QZ.TOPICS).map(([t, name]) => { const m = qzMastery(t); return `<div><span>${name}</span><span class="tp-bar"><i style="width:${(m.secure / m.total) * 100}%;background:hsl(${CHEM_HUE} 60% 50%)"></i></span></div>`; }).join('')}</div>
-    <button class="btn ${doneToday ? '' : 'primary'}" data-act="${doneToday ? 'go' : 'qz-start'}" data-tab="quiz">${doneToday ? 'Open quiz' : (today && today.n ? 'Continue today’s quiz' : 'Start today’s quiz')}</button>
-  </section>`;
-}
-
 function renderQuiz() {
   const el = $('#v-quiz');
   const Q = ui.qz;

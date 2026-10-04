@@ -334,7 +334,9 @@ const ui = {
   form: null,                 // { key, ctx: 'lib' | 'goal' }
   cal: { y: null, m: null, pick: null, armed: null },
   weekOff: 0,
-  goals: { draft: null, open: null },
+  goals: { draft: null, open: null, archive: false },
+  statsView: null,            // null (dashboard) | 'subjects' | 'overview' | 'activity' | 'exams'
+  gridModel: null,
   sheet: null,
   pendingRender: false,
   qr: false,
@@ -401,22 +403,187 @@ function renderSyncPill() {
   if (card) card.textContent = t.long;
 }
 
-/* ── Stats ── */
+/* ── Stats: a dashboard of tiles; each tile opens its own page ── */
+
+const STATS_VIEWS = {
+  subjects: 'Subjects and papers',
+  overview: 'Completion overview',
+  activity: 'Calendar activity',
+  exams: 'Exam countdown',
+};
 
 function renderStats() {
   const el = $('#v-stats');
-  el.innerHTML = [
-    syncBannerHTML(),
-    overallHTML(),
-    quizStatsHTML(),
-    goalsStatsHTML(),
-    overviewHTML(),
-    subjectsHTML(),
-    activityHTML(),
-    examsHTML(),
-    PREVIEW ? '' : `<div class="print-row"><button class="btn" data-act="print">Print or save as PDF</button></div>`,
-  ].join('');
-  afterLibRender(el);
+  if (document.body.classList.contains('printing')) {
+    el.innerHTML = [overallHTML(), subjectsHTML(), overviewHTML(), activityHTML(), examsHTML()].join('');
+    return;
+  }
+  const V = ui.statsView;
+  if (V && STATS_VIEWS[V]) {
+    const body = V === 'subjects' ? overallHTML() + subjectsHTML()
+      : V === 'overview' ? overviewHTML()
+        : V === 'activity' ? activityHTML()
+          : examsHTML();
+    el.innerHTML = `<div class="detail-head"><button class="back" data-act="stats-back"><span aria-hidden="true">‹</span> Stats</button><h2 class="h">${STATS_VIEWS[V]}</h2></div>
+      <div class="detail${V === 'subjects' ? '' : ' detail-solo'}">${body}</div>`;
+    afterLibRender(el);
+    return;
+  }
+  el.innerHTML = `${syncBannerHTML()}
+    <div class="dash">${[progressTile(), goalsTile(), quizTile(), weekTile(), overviewTile(), examsTile()].join('')}</div>
+    ${PREVIEW ? '' : '<div class="print-row"><button class="btn small" data-act="print">Print or save as PDF</button></div>'}`;
+}
+
+let ignoreNextPop = false;
+function openStatsView(v) {
+  if (!STATS_VIEWS[v]) return;
+  const fresh = !ui.statsView;
+  ui.statsView = v;
+  ui.form = null;
+  if (fresh) { try { history.pushState({ cd: 'detail' }, ''); } catch (e) { /* ignore */ } }
+  ui.tab = 'stats';
+  render();
+  window.scrollTo({ top: 0 });
+}
+function closeStatsView() {
+  if (history.state && history.state.cd === 'detail') { history.back(); return; } // popstate finishes the job
+  leaveStatsView();
+}
+function leaveStatsView() {
+  ui.statsView = null;
+  ui.lib = null;
+  ui.form = null;
+  render();
+  window.scrollTo({ top: 0 });
+}
+window.addEventListener('popstate', () => {
+  if (ignoreNextPop) { ignoreNextPop = false; return; }
+  if (ui.statsView) leaveStatsView();
+});
+
+function tileHead(title, attrs) {
+  return `<button class="wt-h" ${attrs}><h3>${title}</h3><span class="wt-go" aria-hidden="true">›</span></button>`;
+}
+
+function progressTile() {
+  const t = totals();
+  const scores = Object.values(state.lib).filter((r) => r.done && r.score != null).map((r) => r.score);
+  const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+  const rows = SUBJECTS.map((s) => {
+    const st = subjStats(s.id);
+    const pct = st.target ? (st.done / st.target) * 100 : 0;
+    return `<button class="wt-subj" data-act="dash-subj" data-s="${s.id}" aria-label="${esc(s.name)}: ${st.done} of ${st.target} done. Open its papers.">
+      <span class="wt-code">${s.code}</span>
+      <span class="wt-bar"><i style="width:${clamp(pct, 0, 100)}%;background:${col(s.id).bg}"></i></span>
+      <span class="wt-pct">${pct > 0 && pct < 10 ? pct.toFixed(1) : Math.round(pct)}%</span></button>`;
+  }).join('');
+  return `<section class="wt wt-progress" data-act="stats-open" data-v="subjects" aria-label="Progress. Open subjects and papers.">
+    ${tileHead('Progress', 'data-act="stats-open" data-v="subjects"')}
+    <div class="wt-prog">
+      <div class="ring-wrap ring-sm">${ringSVG(t.target ? t.done / t.target : 0, 76, 8, `${t.pct.toFixed(2)} percent of targets done`)}<div class="ring-txt"><b>${t.pct.toFixed(1)}%</b></div></div>
+      <dl class="wt-kv">
+        <div><dt>Done</dt><dd>${t.done}<small>/${t.target}</small></dd></div>
+        <div><dt>Left</dt><dd>${t.left}</dd></div>
+        <div><dt>Average</dt><dd>${avg != null ? `${avg}%` : '–'}</dd></div>
+      </dl>
+    </div>
+    <div class="wt-subjs">${rows}</div>
+  </section>`;
+}
+
+function shortDue(g, st) {
+  const p = `${st.pr.done} of ${st.pr.total}`;
+  if (!g.deadline) return p;
+  const d = daysUntil(g.deadline);
+  if (d < 0) return `${p}, overdue`;
+  if (d === 0) return `${p}, due today`;
+  if (d === 1) return `${p}, due tomorrow`;
+  return `${p}, due ${fmtDate(g.deadline)}`;
+}
+
+function goalsTile() {
+  const active = activeGoals();
+  const finished = Object.keys(state.goals).length - active.length;
+  let body;
+  if (!active.length) {
+    body = `<p class="wt-big">0<small> active</small></p><p class="wt-sub">${finished ? `${finished} finished. ` : ''}Tap to set one.</p>`;
+    return `<section class="wt" data-act="dash-goal-new" aria-label="Goals: none active. Set a new goal.">${tileHead('Goals', 'data-act="dash-goal-new"')}${body}</section>`;
+  } else {
+    const g = active[0];
+    const st = goalState(g);
+    const warn = active.filter((x) => { const s2 = goalState(x); return s2.risk || s2.overdue; }).length;
+    body = `<p class="wt-big">${active.length}<small> active</small></p>
+      <button class="wt-sub wt-link" data-act="goal-open" data-id="${g.id}" aria-label="Open ${esc(g.title)}: ${esc(shortDue(g, st))}"><b>${esc(g.title)}</b>${esc(shortDue(g, st))}</button>
+      ${warn ? `<p class="wt-warn">${warn === 1 ? '1 needs' : `${warn} need`} attention</p>` : ''}`;
+  }
+  return `<section class="wt" data-act="go" data-tab="goals" aria-label="Goals. Open the Goals tab.">${tileHead('Goals', 'data-act="go" data-tab="goals"')}${body}</section>`;
+}
+
+function quizTile() {
+  const left = qzTodayQueue().length;
+  const today = state.qdays[todayISO()];
+  const streak = qzStreak();
+  const done = !left && today && today.n;
+  const main = done
+    ? `<p class="wt-big wt-ok">Done<small> today</small></p><p class="wt-sub">${today.c} of ${today.n} right</p>`
+    : `<p class="wt-big">${left}<small> waiting</small></p><p class="wt-sub">${left ? `About ${Math.max(2, Math.round(left * 0.3))} minutes` : 'Nothing due'}</p>`;
+  return `<section class="wt" data-act="go" data-tab="quiz" aria-label="Chemistry quiz. Open the Quiz tab.">${tileHead('Chemistry quiz', 'data-act="go" data-tab="quiz"')}${main}
+    <p class="wt-foot">${streak ? `${streak}-day streak` : 'No streak yet'}</p></section>`;
+}
+
+function weekTile() {
+  const wk = weekStartOf(todayISO());
+  const days = [...Array(7)].map((_, i) => addDays(wk, i));
+  const vals = days.map((d) => Object.values(dayTotalsBySubj(d)).reduce((a, b) => a + b, 0));
+  const max = Math.max(1, ...vals);
+  const total = vals.reduce((a, b) => a + b, 0);
+  const t = todayISO();
+  return `<section class="wt" data-act="stats-open" data-v="activity" aria-label="This week: ${total} papers done. Open calendar activity.">${tileHead('This week', 'data-act="stats-open" data-v="activity"')}
+    <p class="wt-big">${total}<small> done</small></p>
+    <div class="wt-spark" aria-hidden="true">${vals.map((v, i) => `<span class="${days[i] === t ? 'cur' : ''}${days[i] > t ? ' fut' : ''}"><em><i style="height:${Math.max(4, (v / max) * 100)}%"></i></em><small>${'SMTWTFS'[i]}</small></span>`).join('')}</div>
+  </section>`;
+}
+
+function overviewTile() {
+  const sels = Object.fromEntries(SUBJECTS.map((s) => [s.id, targetSel(s.id)]));
+  const ySet = new Set();
+  SUBJECTS.forEach((s) => (sels[s.id] ? sels[s.id].years : TARGET_YEARS).forEach((y) => ySet.add(y)));
+  const years = YEARS.filter((y) => ySet.has(y)).slice(0, 8).reverse();
+  let inT = 0, doneT = 0;
+  const rows = SUBJECTS.map((s) => {
+    const sel = sels[s.id];
+    const cells = years.map((y) => {
+      let tot = 0, dn = 0;
+      for (const x of SERIES) {
+        if (sel && (!sel.years.includes(y) || !sel.series.includes(x.id))) continue;
+        for (const p of s.papers) for (const v of variants(s.id, x.id, p.id)) {
+          tot++;
+          if (state.lib[pkey(s.id, p.id, y, x.id, v)]) dn++;
+        }
+      }
+      inT += tot; doneT += dn;
+      if (!tot) return '<span class="off"></span>';
+      const f = dn / tot;
+      return `<span style="${dn ? `background:color-mix(in srgb, ${col(s.id).bg} ${Math.round(25 + f * 75)}%, var(--surface))` : ''}"></span>`;
+    }).join('');
+    return `<b>${s.code}</b>${cells}`;
+  }).join('');
+  return `<section class="wt" data-act="stats-open" data-v="overview" aria-label="Completion overview. Open it.">${tileHead('Completion', 'data-act="stats-open" data-v="overview"')}
+    <div class="wt-heat" style="grid-template-columns:18px repeat(${years.length}, minmax(0, 1fr))" aria-hidden="true">${rows}</div>
+    <p class="wt-foot">${years.length ? `${years[0]}–${years[years.length - 1]}, ${doneT} of ${inT}` : ''}</p>
+  </section>`;
+}
+
+function examsTile() {
+  const list = nextExams().slice(0, 3);
+  if (!list.length) return '';
+  return `<section class="wt wt-full" data-act="stats-open" data-v="exams" aria-label="Next exams. Open the exam countdown.">${tileHead('Next exams', 'data-act="stats-open" data-v="exams"')}
+    <ul class="wt-exams">${list.map((x) => {
+      const d = daysUntil(x.date), dd = dateObj(x.date);
+      return `<li style="--sc:${col(x.s, x.p).bg}"><span class="d"><b>${dd.getDate()}</b>${dd.toLocaleDateString('en-GB', { month: 'short' })}</span>
+        <span class="t"><b>${esc(SUBJ[x.s].name)}</b> ${esc(x.title)}</span>
+        <span class="n">${d === 0 ? 'Today' : `${d}<small> ${d === 1 ? 'day' : 'days'}</small>`}</span></li>`;
+    }).join('')}</ul></section>`;
 }
 
 function heroHTML() {
@@ -1063,10 +1230,7 @@ function saveDay() {
 /* ── Goals ── */
 
 function sortedGoals() {
-  return Object.values(state.goals).sort((a, b) => {
-    const ka = goalSortKey(a), kb = goalSortKey(b);
-    return ka[0] - kb[0] || (ka[0] ? kb[1].localeCompare(ka[1]) : ka[1].localeCompare(kb[1]));
-  });
+  return Object.values(state.goals).sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999'));
 }
 
 function goalState(g) {
@@ -1081,88 +1245,62 @@ function goalState(g) {
   return { pr, complete, d, rate, overdue, risk, ringCol };
 }
 
-function goalHeadHTML(g, act, expanded) {
+const isArchived = (g) => !!g.archived || goalState(g).complete;
+const activeGoals = () => sortedGoals().filter((g) => !isArchived(g));
+
+function finishedOn(g) {
+  let last = null;
+  for (const k of g.paperKeys || []) {
+    const r = state.lib[k];
+    if (!r || !r.done) continue;
+    const d = r.date || (r.markedAt ? iso(new Date(r.markedAt)) : null);
+    if (d && (!last || d > last)) last = d;
+  }
+  return last;
+}
+
+function archivedGoals() {
+  return Object.values(state.goals).filter(isArchived)
+    .sort((a, b) => (finishedOn(b) || b.deadline || '').localeCompare(finishedOn(a) || a.deadline || ''));
+}
+
+function finishText(g) {
+  const st = goalState(g);
+  if (!st.complete) return `Archived with ${st.pr.done} of ${st.pr.total} done`;
+  const last = finishedOn(g);
+  if (!last) return `All ${st.pr.total} done`;
+  const diff = g.deadline ? dayNum(g.deadline) - dayNum(last) : null;
+  const when = diff == null ? '' : diff > 0 ? `, ${plural(diff, 'day')} early` : diff === 0 ? ', on the deadline' : `, ${plural(-diff, 'day')} late`;
+  return `Finished ${fmtDate(last, 'dm')}${when}`;
+}
+
+function goalHeadHTML(g, act, expanded, inArchive) {
   const st = goalState(g);
   return `<button class="goal-h" data-act="${act}" data-id="${g.id}"${expanded != null ? ` aria-expanded="${expanded}"` : ''}>
       <span class="goal-ring">${ringSVG(st.pr.total ? st.pr.done / st.pr.total : 0, 52, 6, `${st.pr.done} of ${st.pr.total} done`, st.complete ? null : st.ringCol)}<b>${st.pr.done}<small>/${st.pr.total}</small></b></span>
-      <span class="goal-t"><b>${esc(g.title)}</b><span>${esc(dueText(g, st.pr))}</span></span>
-      ${st.risk ? `<span class="flag">Needs ${fmtNum(st.rate, 1)} a day</span>` : ''}${st.overdue ? '<span class="flag">Overdue</span>' : ''}
+      <span class="goal-t"><b>${esc(g.title)}</b><span>${esc(inArchive ? finishText(g) : dueText(g, st.pr))}</span></span>
+      ${!inArchive && st.risk ? `<span class="flag">Needs ${fmtNum(st.rate, 1)} a day</span>` : ''}${!inArchive && st.overdue ? '<span class="flag">Overdue</span>' : ''}
+      <span class="goal-chev" aria-hidden="true">›</span>
     </button>`;
-}
-
-function goalsStatsHTML() {
-  const list = sortedGoals();
-  if (!list.length) return '';
-  const active = list.filter((g) => !goalState(g).complete);
-  const doneCount = list.length - active.length;
-  const shown = active.slice(0, 4);
-  const body = shown.length
-    ? `<div class="goals goals-mini">${shown.map((g) => `<article class="goal${goalState(g).risk ? ' risk' : ''}${goalState(g).overdue ? ' overdue' : ''}">${goalHeadHTML(g, 'goal-open')}</article>`).join('')}</div>`
-    : '<p class="fine">Every goal is done. Set a new one on the Goals tab.</p>';
-  const more = active.length > shown.length ? `${active.length - shown.length} more active` : '';
-  const foot = [more, doneCount ? `${doneCount} done` : ''].filter(Boolean).join(', ');
-  return `<section class="block">
-    <div class="block-h"><h2 class="h">Your goals</h2><button class="link" data-act="go" data-tab="goals">All goals</button></div>
-    ${body}
-    ${foot ? `<p class="fine goals-foot">${esc(foot)}.</p>` : ''}
-  </section>`;
-}
-
-function goalSortKey(g) {
-  const pr = goalProgress(g);
-  return [pr.total && pr.done >= pr.total ? 1 : 0, g.deadline || '9999'];
 }
 
 function renderGoals() {
   const el = $('#v-goals');
-  const list = sortedGoals();
   const D = ui.goals.draft;
+  const active = activeGoals();
+  const arch = archivedGoals();
+  const showArch = !!ui.goals.archive;
   el.innerHTML = `
     <div class="view-head"><h2 class="h">Goals</h2>${D ? '' : '<button class="btn primary" data-act="goal-new">New goal</button>'}</div>
-    <p class="fine">A goal is a short list of exact papers with a deadline, like “these eight Physics papers by Sunday”. Marking a paper done anywhere counts toward every goal that includes it.</p>
-    ${D ? goalEditorHTML(D) : ''}
-    ${list.length ? `<div class="goals">${list.map(goalCardHTML).join('')}</div>` : (D ? '' : `<div class="empty"><p>No goals yet. Pick the papers you want finished by a date, and the app will warn you if the pace gets tight.</p><button class="btn primary" data-act="goal-new">New goal</button></div>`)}`;
+    ${D ? goalEditorHTML(D) : '<p class="fine">A goal is a set of exact papers with a deadline. Marking a paper done anywhere counts toward every goal that includes it.</p>'}
+    ${active.length
+      ? `<div class="goals">${active.map((g) => goalCardHTML(g, false)).join('')}</div>`
+      : (D ? '' : `<div class="empty"><p>${arch.length ? 'No active goals right now. ' : ''}Pick the papers you want finished by a date, and the app will warn you if the pace gets tight.</p><button class="btn primary" data-act="goal-new">New goal</button></div>`)}
+    ${arch.length ? `<section class="archive">
+      <button class="archive-h" data-act="goal-archive" aria-expanded="${showArch}"><span>Finished and archived</span><b>${arch.length}</b><span class="archive-tog" aria-hidden="true">${showArch ? 'Hide' : 'Show'}</span></button>
+      ${showArch ? `<div class="goals">${arch.map((g) => goalCardHTML(g, true)).join('')}</div>` : ''}
+    </section>` : ''}`;
   afterLibRender(el);
-  const t = el.querySelector('.geditor input[name="title"]');
-  if (t && D && D.focusTitle) { t.focus(); D.focusTitle = false; }
-}
-
-function goalEditorHTML(D) {
-  const s = SUBJ[D.s];
-  const sel = new Set(D.keys);
-  const ser = SERIES_BY_ID[D.ser];
-  const countYear = (y) => D.keys.filter((k) => { const p = parseKey(k); return p.s === D.s && p.y === y; }).length;
-  const blocks = s.papers.map((p) => {
-    const vs = variants(D.s, D.ser, p.id);
-    if (!vs.length) return `<div class="pblock"><p class="pname">Paper ${p.n} <span>${esc(p.name)}</span></p><p class="na-note">Not set in ${ser.name}.</p></div>`;
-    return `<div class="pblock"><p class="pname">Paper ${p.n} <span>${esc(p.name)}</span></p><div class="tiles">${vs.map((v) => {
-      const k = pkey(D.s, p.id, D.y, D.ser, v);
-      return tileHTML(k, { act: 'gd-tile', sel: sel.has(k), ctx: 'draft' });
-    }).join('')}</div></div>`;
-  }).join('');
-  const doneN = D.keys.filter((k) => state.lib[k] && state.lib[k].done).length;
-  const bySubj = {};
-  for (const k of D.keys) { const p = parseKey(k); bySubj[p.s] = (bySubj[p.s] || 0) + 1; }
-  const summary = Object.entries(bySubj).map(([sid, n]) => `<button class="sumchip" data-act="gd-subj" data-s="${sid}" style="--sc:${col(sid).bg}">${esc(SUBJ[sid].name)} <b>${n}</b></button>`).join('');
-  return `<form class="geditor" data-form="goal" novalidate>
-    <h3>${D.id ? 'Edit goal' : 'New goal'}</h3>
-    <div class="ge-fields">
-      <label class="fld grow"><span>Name</span><input name="title" value="${esc(D.title)}" placeholder="Physics Paper 4 sprint" autocomplete="off" maxlength="80"></label>
-      <label class="fld"><span>Deadline</span><input type="date" name="deadline" value="${esc(D.deadline)}"></label>
-    </div>
-    <p class="ge-step">Choose papers</p>
-    <div class="chips">${SUBJECTS.map((x) => { const c = col(x.id); return `<button type="button" class="chip${x.id === D.s ? ' on' : ''}" data-act="gd-subj" data-s="${x.id}" style="--cb:${c.bg};--cf:${c.fg}" aria-pressed="${x.id === D.s}" aria-label="${esc(x.name)}">${x.code}</button>`; }).join('')}</div>
-    <div class="lib" style="--sc:${col(D.s).bg}">
-      ${yearsHTML(D.s, D.y, 'gd-year', countYear)}
-      ${seriesHTML(D.s, D.ser, 'gd-ser')}
-      <div class="pblocks">${blocks}</div>
-      <button type="button" class="link" data-act="gd-all">Select every ${esc(s.name)} paper in ${ser.name} ${D.y}</button>
-    </div>
-    <p class="ge-count" aria-live="polite"><b>${plural(D.keys.length, 'paper')}</b> selected${doneN ? `, ${doneN} already done` : ''}.</p>
-    ${summary ? `<div class="sums">${summary}</div>` : ''}
-    <p class="mf-err" hidden></p>
-    <div class="mf-act"><button class="btn primary" type="submit">${D.id ? 'Save goal' : 'Create goal'}</button><button class="btn" type="button" data-act="gd-cancel">Cancel</button></div>
-  </form>`;
 }
 
 function dueText(g, pr) {
@@ -1175,42 +1313,362 @@ function dueText(g, pr) {
   return `Due ${fmtDate(g.deadline)}, ${plural(d, 'day')} left`;
 }
 
-function goalCardHTML(g) {
+/* Group a goal's papers by component (Physics Paper 4, ...). */
+function groupGoalKeys(keys) {
+  const groups = {};
+  for (const k of keys || []) {
+    const p = parseKey(k);
+    const G = groups[p.sp] || (groups[p.sp] = { sp: p.sp, s: p.s, p: p.p, keys: new Set(), done: 0, total: 0 });
+    G.keys.add(k);
+    G.total++;
+    if (state.lib[k] && state.lib[k].done) G.done++;
+  }
+  return Object.values(groups).sort((a, b) => ALL_SP.indexOf(a.sp) - ALL_SP.indexOf(b.sp));
+}
+
+/* One component as a small table: a row per year, a column per series and variant.
+   Only the years and columns that are in the goal appear. */
+function goalMatrixHTML(G, gid) {
+  const parsed = [...G.keys].map(parseKey);
+  const years = [...new Set(parsed.map((p) => p.y))].sort((a, b) => b - a);
+  const cols = [];
+  const serGroups = [];
+  for (const x of SERIES) {
+    const vs = [...new Set(parsed.filter((p) => p.ser === x.id).map((p) => p.v))].sort((a, b) => a - b);
+    if (!vs.length) continue;
+    serGroups.push({ ser: x.id, n: vs.length, first: cols.length === 0 });
+    vs.forEach((v, i) => cols.push({ ser: x.id, v, first: i === 0 && cols.length > 0 }));
+  }
+  // One series: name it in the corner and keep a single header row. Several: a series row over the paper numbers.
+  const one = serGroups.length === 1;
+  const head = `${one ? '' : `<tr><th></th>${serGroups.map((g) => `<th colspan="${g.n}" class="gm-ser${g.first ? '' : ' gm-first'}" scope="colgroup">${SER_SHORT[g.ser]}</th>`).join('')}</tr>`}
+    <tr><th class="gm-corner">${one ? SER_SHORT[serGroups[0].ser] : ''}</th>${cols.map((c) => `<th class="gm-v${c.first ? ' gm-first' : ''}" scope="col">${compTail(G.s, G.p, c.v)}</th>`).join('')}</tr>`;
+  const body = years.map((y) => `<tr><th class="gm-y" scope="row">${y}</th>${cols.map((c) => {
+    const k = pkey(G.s, G.p, y, c.ser, c.v);
+    return `<td${c.first ? ' class="gm-first"' : ''}>${G.keys.has(k) ? goalCellHTML(k, gid) : ''}</td>`;
+  }).join('')}</tr>`).join('');
+  return `<div class="gm-wrap"><table class="gm">${head}${body}</table></div>`;
+}
+
+function goalCellHTML(k, gid) {
+  const p = parseKey(k);
+  const r = state.lib[k];
+  const done = r && r.done;
+  const c = col(p.s, p.p);
+  const editing = ui.form && ui.form.key === k && ui.form.ctx === `goal:${gid}`;
+  const label = `${compCode(p.s, p.p, p.v)} ${SERIES_BY_ID[p.ser].long} ${p.y}${done ? ', done' + (r.score != null ? `, ${r.score} percent` : '') : ', not done'}`;
+  return `<button class="gm-c${done ? ' done' : ''}${k === derived.recentKey ? ' recent' : ''}${editing ? ' editing' : ''}" data-act="goal-tile" data-key="${k}" style="--pc:${c.bg};--pf:${c.fg}" aria-label="${esc(label)}" title="${esc(label)}">${done ? (r.score != null ? r.score : '<span aria-hidden="true">✓</span>') : ''}</button>`;
+}
+
+function goalCardHTML(g, inArchive) {
   const st = goalState(g);
   const open = ui.goals.open === g.id;
-  const keys = (g.paperKeys || []).slice().sort((a, b) => {
-    const A = parseKey(a), B = parseKey(b);
-    return ALL_SP.indexOf(A.sp) - ALL_SP.indexOf(B.sp) || B.y - A.y || ['ON', 'MJ', 'FM'].indexOf(A.ser) - ['ON', 'MJ', 'FM'].indexOf(B.ser) || A.v - B.v;
-  });
   let body = '';
   if (open) {
-    const groups = {};
-    for (const k of keys) { const p = parseKey(k); (groups[p.sp] = groups[p.sp] || []).push(k); }
-    body = `<div class="goal-body">${Object.entries(groups).map(([sp, ks]) => {
-      const { s: sid, p: pid } = splitSp(sp);
-      const formKey = ui.form && ui.form.ctx === `goal:${g.id}` && ks.includes(ui.form.key) ? ui.form.key : null;
-      return `<div class="gb-subj"><p class="pname">${swatch(sid, pid)}${esc(SUBJ[sid].name)} Paper ${paperOf(sid, pid).n}</p><div class="tiles tiles-wide">${ks.map((k) => {
-        const p = parseKey(k);
-        return tileHTML(k, { act: 'goal-tile', ctx: `goal:${g.id}`, code: compCode(p.s, p.p, p.v).replace(/^\d{4}\//, ''), sub: `${SER_SHORT[p.ser]} ${String(p.y).slice(2)}${state.lib[k] && state.lib[k].score != null ? `, ${state.lib[k].score}%` : ''}` });
-      }).join('')}</div>${formKey ? formHTML(formKey) : ''}</div>`;
+    const groups = groupGoalKeys(g.paperKeys);
+    const acts = [
+      `<button class="btn small" data-act="goal-edit" data-id="${g.id}">${inArchive && st.complete ? 'Add papers' : 'Edit'}</button>`,
+      !inArchive ? `<button class="btn small" data-act="goal-arch" data-id="${g.id}">Archive</button>` : '',
+      inArchive && !st.complete ? `<button class="btn small" data-act="goal-restore" data-id="${g.id}">Restore</button>` : '',
+      `<button class="btn small danger" data-act="goal-del" data-id="${g.id}">Delete</button>`,
+    ].join('');
+    body = `<div class="goal-body">${groups.map((G) => {
+      const c = col(G.s, G.p);
+      const formKey = ui.form && ui.form.ctx === `goal:${g.id}` && G.keys.has(ui.form.key) ? ui.form.key : null;
+      return `<div class="gb-group">
+        <div class="gb-h">${swatch(G.s, G.p)}<b>${esc(SUBJ[G.s].name)} Paper ${paperOf(G.s, G.p).n}</b><span class="gb-n">${G.done}/${G.total}</span></div>
+        <span class="gb-bar" aria-hidden="true"><i style="width:${G.total ? (G.done / G.total) * 100 : 0}%;background:${c.bg}"></i></span>
+        ${goalMatrixHTML(G, g.id)}
+        ${formKey ? formHTML(formKey) : ''}
+      </div>`;
     }).join('')}
-      <div class="mf-act"><button class="btn" data-act="goal-edit" data-id="${g.id}">Edit</button><button class="btn danger" data-act="goal-del" data-id="${g.id}">Delete</button></div></div>`;
+      <p class="fine gb-tip">Tap a box to mark that paper done or change its marks. Filled boxes are done and show your score.</p>
+      <div class="goal-acts">${acts}</div></div>`;
   }
-  return `<article class="goal${st.complete ? ' complete' : ''}${st.risk ? ' risk' : ''}${st.overdue ? ' overdue' : ''}${open ? ' open' : ''}" id="goal-${g.id}">
-    ${goalHeadHTML(g, 'goal-toggle', open)}${body}</article>`;
+  return `<article class="goal${st.complete ? ' complete' : ''}${inArchive ? ' archived' : ''}${!inArchive && st.risk ? ' risk' : ''}${!inArchive && st.overdue ? ' overdue' : ''}${open ? ' open' : ''}" id="goal-${g.id}">
+    ${goalHeadHTML(g, 'goal-toggle', open, inArchive)}${body}</article>`;
+}
+
+/* ── Goal editor with a drag-to-select grid ── */
+
+function nextSunday() {
+  const t = todayISO();
+  const wd = dateObj(t).getDay();
+  return addDays(t, wd === 0 ? 7 : 7 - wd);
 }
 
 function newDraft(g) {
   if (g) {
     const first = g.paperKeys && g.paperKeys[0] ? parseKey(g.paperKeys[0]) : null;
-    const s = first ? first.s : 'phys';
-    const pos = first ? { y: first.y, ser: first.ser } : defaultLibPos(s);
-    return { id: g.id, title: g.title, deadline: g.deadline, keys: [...(g.paperKeys || [])], s, y: pos.y, ser: pos.ser, createdAt: g.createdAt };
+    return { id: g.id, title: g.title, deadline: g.deadline, keys: [...(g.paperKeys || [])], s: first ? first.s : 'phys', showAll: false, createdAt: g.createdAt };
   }
-  const s = 'phys';
-  const pos = defaultLibPos(s);
-  return { id: null, title: '', deadline: addDays(todayISO(), 7), keys: [], s, y: pos.y, ser: pos.ser, focusTitle: true };
+  const dl = deadlineChoices()[0];
+  return { id: null, title: '', deadline: dl ? dl[0] : addDays(todayISO(), 7), keys: [], s: 'phys', showAll: false };
 }
+
+/* Deadline shortcuts: next Sunday, a week, two weeks, the end of the month (no duplicates, nothing within 2 days). */
+function deadlineChoices() {
+  const t = todayISO();
+  const short = (d) => `${dateObj(d).getDate()} ${MONTHS[dateObj(d).getMonth()].slice(0, 3)}`;
+  const sun = nextSunday();
+  const td = dateObj(t);
+  const eom = iso(new Date(td.getFullYear(), td.getMonth() + 1, 0));
+  const out = [];
+  for (const [d, l] of [[sun, `Sun ${short(sun)}`], [addDays(t, 7), 'In a week'], [addDays(t, 14), 'In two weeks'], [eom, `End of ${MONTHS[td.getMonth()].slice(0, 3)}`]]) {
+    if (daysUntil(d) < 3 || out.some((x) => x[0] === d)) continue;
+    out.push([d, l]);
+  }
+  return out;
+}
+
+/* A name for a goal left unnamed, from what's in it: "Physics Paper 4", "Physics, 12 papers", "Physics and Chemistry, 20 papers". */
+function autoGoalTitle(keys) {
+  const subs = [...new Set(keys.map((k) => parseKey(k).s))];
+  const sps = [...new Set(keys.map((k) => parseKey(k).sp))];
+  const names = SUBJECTS.filter((s) => subs.includes(s.id)).map((s) => s.name);
+  if (sps.length === 1) { const p = parseKey(keys[0]); return `${SUBJ[p.s].name} Paper ${paperOf(p.s, p.p).n}`; }
+  const who = names.length <= 2 ? names.join(' and ') : `${names.length} subjects`;
+  return `${who}, ${plural(keys.length, 'paper')}`;
+}
+
+function draftCountHTML(D) {
+  const doneN = D.keys.filter((k) => state.lib[k] && state.lib[k].done).length;
+  const by = {};
+  for (const k of D.keys) { const s = parseKey(k).s; by[s] = (by[s] || 0) + 1; }
+  const parts = Object.keys(by).length > 1 ? ` (${SUBJECTS.filter((s) => by[s.id]).map((s) => `${s.name} ${by[s.id]}`).join(', ')})` : '';
+  return `<b>${plural(D.keys.length, 'paper')}</b> selected${parts}${doneN ? `. ${doneN} already done.` : '.'}`;
+}
+
+function gridModel(D) {
+  const s = SUBJ[D.s];
+  const tsel = targetSel(D.s);
+  const base = tsel && tsel.years.length ? tsel.years : TARGET_YEARS;
+  const picked = new Set(D.keys.map(parseKey).filter((p) => p.s === D.s).map((p) => p.y)); // never hide a year that has papers in the goal
+  const years = YEARS.filter((y) => D.showAll || base.includes(y) || picked.has(y));
+  const sers = SERIES.filter((x) => seriesOffered(D.s, x.id));
+  const rows = [];
+  for (const y of years) sers.forEach((x, i) => rows.push({ y, ser: x.id, firstOfYear: i === 0, span: sers.length }));
+  const cols = [];
+  for (const p of s.papers) {
+    const vs = [...new Set(SERIES.flatMap((x) => variants(D.s, x.id, p.id)))].sort((a, b) => a - b);
+    vs.forEach((v, i) => cols.push({ p: p.id, n: p.n, v, first: i === 0 }));
+  }
+  return { rows, cols, hidden: YEARS.length - years.length };
+}
+
+const cellKey = (D, row, c) => (variants(D.s, row.ser, c.p).includes(c.v) ? pkey(D.s, c.p, row.y, row.ser, c.v) : null);
+
+function paperGridHTML(D) {
+  const M = gridModel(D);
+  ui.gridModel = M;
+  const sel = new Set(D.keys);
+  const head = `<tr><th class="gg-y0" colspan="2"></th>${M.cols.map((c, ci) => `<th class="${c.first ? 'gg-first' : ''}" scope="col"><button type="button" class="gg-ch" data-act="gd-col" data-c="${ci}" aria-label="Select every paper ${c.n}${c.v} shown">${c.n}${c.v}</button></th>`).join('')}</tr>`;
+  const body = M.rows.map((r, ri) => {
+    const yearCell = r.firstOfYear ? `<th rowspan="${r.span}" class="gg-y" scope="rowgroup"><button type="button" class="gg-yh" data-act="gd-yr" data-y="${r.y}" aria-label="Select every ${SUBJ[D.s].name} paper from ${r.y}">${r.y}</button></th>` : '';
+    const cells = M.cols.map((c, ci) => {
+      const k = cellKey(D, r, c);
+      const cls = c.first ? ' class="gg-first"' : '';
+      if (!k) return `<td${cls}><span class="gc-na" data-r="${ri}" data-c="${ci}"></span></td>`;
+      const done = state.lib[k] && state.lib[k].done;
+      const on = sel.has(k);
+      const cc = col(D.s, c.p);
+      return `<td${cls}><button type="button" class="gc${on ? ' on' : ''}${done ? ' done' : ''}" data-act="gd-cell" data-k="${k}" data-r="${ri}" data-c="${ci}" style="--pc:${cc.bg};--pf:${cc.fg}" aria-pressed="${on}" aria-label="${esc(`${compCode(D.s, c.p, c.v)} ${SERIES_BY_ID[r.ser].long} ${r.y}${done ? ', already done' : ''}`)}"></button></td>`;
+    }).join('');
+    return `<tr class="${r.firstOfYear && ri ? 'gg-yr' : ''}">${yearCell}<th class="gg-s" scope="row"><button type="button" class="gg-rh" data-act="gd-row" data-r="${ri}" aria-label="Select every paper from ${SERIES_BY_ID[r.ser].long} ${r.y}">${SER_SHORT[r.ser]}</button></th>${cells}</tr>`;
+  }).join('');
+  return `<div class="gg-wrap"><table class="gg" id="ggrid" style="--n:${M.cols.length};--g:${M.cols.filter((c) => c.first).length}"><thead>${head}</thead><tbody>${body}</tbody></table></div>
+    <div class="gg-legend"><span><i class="gc on" style="--pc:${col(D.s).bg}"></i>In this goal</span><span><i class="gc done"></i>Already done</span>
+      ${M.hidden || D.showAll ? `<button type="button" class="link" data-act="gd-years">${D.showAll ? 'Show target years only' : 'Show older years'}</button>` : ''}</div>
+    <p class="fine gg-hint">Tap a box to add a paper. Drag across boxes to select a block; on a phone, press and hold first. Tap a year, series or paper number to take the whole row or column.</p>`;
+}
+
+function goalEditorHTML(D) {
+  const counts = {};
+  for (const k of D.keys) { const s = parseKey(k).s; counts[s] = (counts[s] || 0) + 1; }
+  const quick = deadlineChoices();
+  return `<form class="geditor" data-form="goal" novalidate>
+    <h3>${D.id ? 'Edit goal' : 'New goal'}</h3>
+    <label class="fld"><span>Name <small class="opt">optional</small></span><input name="title" value="${esc(D.title)}" placeholder="${esc(D.keys.length ? autoGoalTitle(D.keys) : 'Named from the papers you pick')}" autocomplete="off" maxlength="80"></label>
+    <div class="ge-dl">
+      <label class="fld"><span>Deadline</span><input type="date" name="deadline" value="${esc(D.deadline)}"></label>
+      <div class="ge-quick">${quick.map(([d, l]) => `<button type="button" class="qchip${D.deadline === d ? ' on' : ''}" data-act="gd-dl" data-d="${d}">${l}</button>`).join('')}</div>
+    </div>
+    <p class="ge-step">Papers</p>
+    <div class="chips ge-subjs">${SUBJECTS.map((x) => { const c = col(x.id); return `<button type="button" class="chip${x.id === D.s ? ' on' : ''}" data-act="gd-subj" data-s="${x.id}" style="--cb:${c.bg};--cf:${c.fg}" aria-pressed="${x.id === D.s}" aria-label="${esc(x.name)}${counts[x.id] ? `, ${counts[x.id]} selected` : ''}">${x.code}${counts[x.id] ? `<b class="ge-badge">${counts[x.id]}</b>` : ''}</button>`; }).join('')}</div>
+    <p class="ge-subjname">${esc(SUBJ[D.s].name)}</p>
+    ${paperGridHTML(D)}
+    <p class="ge-count" id="geCount" aria-live="polite">${draftCountHTML(D)}</p>
+    <p class="mf-err" hidden></p>
+    <div class="mf-act"><button class="btn primary" type="submit">${D.id ? 'Save goal' : 'Create goal'}</button><button class="btn" type="button" data-act="gd-cancel">Cancel</button>${D.keys.length ? '<button type="button" class="link ge-clear" data-act="gd-clear">Clear all</button>' : ''}</div>
+  </form>`;
+}
+
+/* Grid selection: tap toggles a box; drag (mouse) or press-and-hold then drag (touch)
+   selects or clears the rectangle between where you started and where you are. */
+let gsel = null;
+let gselPending = null;
+let gselQuietUntil = 0;
+
+function gridSync() {
+  const D = ui.goals.draft;
+  if (!D) return;
+  const sel = new Set(D.keys);
+  $$('#ggrid .gc').forEach((b) => { const on = sel.has(b.dataset.k); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+  const cnt = $('#geCount');
+  if (cnt) cnt.innerHTML = draftCountHTML(D);
+  const n = D.keys.filter((k) => parseKey(k).s === D.s).length;
+  const chip = document.querySelector(`.ge-subjs .chip[data-s="${D.s}"]`);
+  if (chip) {
+    let b = chip.querySelector('.ge-badge');
+    if (n && !b) { b = document.createElement('b'); b.className = 'ge-badge'; chip.appendChild(b); }
+    if (b) { if (n) b.textContent = n; else b.remove(); }
+  }
+  const clear = document.querySelector('.ge-clear');
+  if (!D.keys.length && clear) clear.remove();
+  if (D.keys.length && !clear) {
+    const act = document.querySelector('.geditor .mf-act');
+    if (act) act.insertAdjacentHTML('beforeend', '<button type="button" class="link ge-clear" data-act="gd-clear">Clear all</button>');
+  }
+  const title = document.querySelector('.geditor input[name="title"]');
+  if (title) title.placeholder = D.keys.length ? autoGoalTitle(D.keys) : 'Named from the papers you pick';
+}
+
+function gridSetKeys(keys, on) {
+  const D = ui.goals.draft;
+  const set = new Set(D.keys);
+  keys.forEach((k) => (on ? set.add(k) : set.delete(k)));
+  D.keys = [...set];
+  gridSync();
+}
+
+function gselStart(cell) {
+  const D = ui.goals.draft;
+  if (!D || !cell || !cell.dataset.k) return;
+  gsel = { mode: D.keys.includes(cell.dataset.k) ? 'remove' : 'add', snap: new Set(D.keys), r0: +cell.dataset.r, c0: +cell.dataset.c, r1: +cell.dataset.r, c1: +cell.dataset.c };
+  const g = $('#ggrid');
+  if (g) g.classList.add('gg-drag');
+  gselApply();
+}
+
+function gselApply() {
+  const D = ui.goals.draft, M = ui.gridModel;
+  if (!D || !M || !gsel) return;
+  const next = new Set(gsel.snap);
+  const [ra, rb] = [Math.min(gsel.r0, gsel.r1), Math.max(gsel.r0, gsel.r1)];
+  const [ca, cb] = [Math.min(gsel.c0, gsel.c1), Math.max(gsel.c0, gsel.c1)];
+  for (let r = ra; r <= rb; r++) for (let c = ca; c <= cb; c++) {
+    const k = cellKey(D, M.rows[r], M.cols[c]);
+    if (k) { if (gsel.mode === 'add') next.add(k); else next.delete(k); }
+  }
+  D.keys = [...next];
+  gridSync();
+}
+
+/* The grid position under a point. Outside the grid it snaps to the nearest row and column,
+   like a spreadsheet, so dragging past the edge still reaches the last row. */
+function gridPosAt(x, y) {
+  const hit = document.elementFromPoint(x, y);
+  const cell = hit && hit.closest && hit.closest('#ggrid .gc, #ggrid .gc-na');
+  if (cell) return [+cell.dataset.r, +cell.dataset.c];
+  const g = $('#ggrid');
+  if (!g || !g.tBodies[0]) return null;
+  const nearest = (rects, v, a, b) => {
+    let best = 0, bd = Infinity;
+    rects.forEach((R, i) => { const d = v < R[a] ? R[a] - v : v > R[b] ? v - R[b] : 0; if (d < bd) { bd = d; best = i; } });
+    return best;
+  };
+  const r = nearest([...g.tBodies[0].rows].map((tr) => tr.getBoundingClientRect()), y, 'top', 'bottom');
+  const c = nearest([...g.querySelectorAll('.gg-ch')].map((b) => b.getBoundingClientRect()), x, 'left', 'right');
+  return [r, c];
+}
+
+function gselMoveTo(x, y) {
+  if (!gsel) return;
+  const pos = gridPosAt(x, y);
+  if (!pos) return;
+  const [r, c] = pos;
+  if (r === gsel.r1 && c === gsel.c1) return;
+  gsel.r1 = r; gsel.c1 = c;
+  gselApply();
+}
+
+/* While dragging, holding near the top or bottom of the screen scrolls the page so the whole grid is reachable. */
+let gselLast = null, gselSpeed = 0, gselRaf = 0;
+function gselTrack(x, y) {
+  gselLast = { x, y };
+  gselMoveTo(x, y);
+  const tabs = document.querySelector('.tabs');
+  const top = Math.max(0, tabs ? tabs.getBoundingClientRect().bottom : 0);
+  const bottom = window.innerHeight;
+  const zone = 56;
+  const v = y < top + zone ? y - (top + zone) : y > bottom - zone ? y - (bottom - zone) : 0;
+  gselSpeed = v ? Math.sign(v) * Math.min(22, 3 + Math.abs(v) / 3) : 0;
+  if (gselSpeed && !gselRaf) gselRaf = requestAnimationFrame(gselStep);
+}
+function gselStep() {
+  gselRaf = 0;
+  if (!gsel || !gselSpeed || !gselLast) return;
+  const before = window.scrollY;
+  window.scrollBy(0, gselSpeed);
+  if (window.scrollY === before) return; // reached the end
+  gselMoveTo(gselLast.x, gselLast.y);
+  gselRaf = requestAnimationFrame(gselStep);
+}
+
+function gselEnd() {
+  if (!gsel) return;
+  gsel = null;
+  gselSpeed = 0;
+  if (gselRaf) { cancelAnimationFrame(gselRaf); gselRaf = 0; }
+  gselQuietUntil = Date.now() + 450;
+  const g = $('#ggrid');
+  if (g) g.classList.remove('gg-drag');
+}
+
+document.addEventListener('pointerdown', (ev) => {
+  if (ev.pointerType === 'touch' || ev.button !== 0) return;
+  const cell = ev.target.closest && ev.target.closest('#ggrid .gc');
+  if (!cell) return;
+  ev.preventDefault();
+  gselStart(cell);
+});
+document.addEventListener('pointermove', (ev) => { if (gsel && ev.pointerType !== 'touch') gselTrack(ev.clientX, ev.clientY); });
+document.addEventListener('pointerup', (ev) => { if (gsel && ev.pointerType !== 'touch') gselEnd(); });
+
+document.addEventListener('touchstart', (ev) => {
+  const cell = ev.target.closest && ev.target.closest('#ggrid .gc');
+  if (!cell || ev.touches.length !== 1) return;
+  const t = ev.touches[0];
+  clearTimeout(gselPending && gselPending.timer);
+  gselPending = {
+    x: t.clientX, y: t.clientY, cell,
+    timer: setTimeout(() => {
+      if (!gselPending) return;
+      gselStart(gselPending.cell);
+      gselPending = null;
+      if (navigator.vibrate) { try { navigator.vibrate(8); } catch (e) { /* ignore */ } }
+    }, 260),
+  };
+}, { passive: true });
+document.addEventListener('touchmove', (ev) => {
+  if (gsel) {
+    ev.preventDefault();
+    const t = ev.touches[0];
+    if (t) gselTrack(t.clientX, t.clientY);
+    return;
+  }
+  if (gselPending) {
+    const t = ev.touches[0];
+    if (!t || Math.hypot(t.clientX - gselPending.x, t.clientY - gselPending.y) > 8) { clearTimeout(gselPending.timer); gselPending = null; }
+  }
+}, { passive: false });
+const gselTouchEnd = (ev) => {
+  if (gselPending) { clearTimeout(gselPending.timer); gselPending = null; }
+  if (gsel) { if (ev.cancelable) ev.preventDefault(); gselEnd(); }
+};
+document.addEventListener('touchend', gselTouchEnd, { passive: false });
+document.addEventListener('touchcancel', gselTouchEnd, { passive: false });
+document.addEventListener('contextmenu', (ev) => { if (ev.target.closest && ev.target.closest('#ggrid')) ev.preventDefault(); });
 
 /* ── Targets ── */
 
@@ -1630,8 +2088,8 @@ async function overviewPDF() {
 }
 
 function doPrint() {
-  renderAll();
   document.body.classList.add('printing');
+  renderAll();
   setTimeout(() => {
     window.print();
     setTimeout(() => { document.body.classList.remove('printing'); render(); }, 500);
@@ -1641,6 +2099,11 @@ function doPrint() {
 /* ───────────── navigation & helpers ───────────── */
 
 function go(tab, opts = {}) {
+  if (tab === 'stats' && ui.tab === 'stats' && ui.statsView) { closeStatsView(); return; }
+  if (tab !== 'stats' && ui.statsView) {
+    ui.statsView = null; ui.lib = null; ui.form = null;
+    if (history.state && history.state.cd === 'detail') { ignoreNextPop = true; history.back(); }
+  }
   ui.tab = tab;
   try { sessionStorage.setItem('cd.tab', tab); } catch (e) { /* ignore */ }
   render();
@@ -1651,7 +2114,11 @@ function openLib(sId, opts = {}) {
   const pos = opts.y ? { y: opts.y, ser: opts.ser } : defaultLibPos(sId);
   ui.lib = { s: sId, y: pos.y, ser: pos.ser };
   ui.form = null;
-  if (ui.tab !== 'stats') { ui.tab = 'stats'; }
+  ui.tab = 'stats';
+  if (ui.statsView !== 'subjects') {
+    if (!ui.statsView) { try { history.pushState({ cd: 'detail' }, ''); } catch (e) { /* ignore */ } }
+    ui.statsView = 'subjects';
+  }
   render();
   if (opts.scroll !== false) {
     const el = document.getElementById(`subj-${sId}`);
@@ -1831,31 +2298,26 @@ document.addEventListener('click', (ev) => {
     /* Goals */
     case 'goal-new': ui.goals.draft = newDraft(); ui.form = null; render(); break;
     case 'gd-cancel': ui.goals.draft = null; render(); break;
-    case 'gd-subj': {
-      const D = ui.goals.draft;
-      D.s = d.s;
-      const firstSel = D.keys.map(parseKey).find((p) => p.s === d.s);
-      const pos = firstSel ? { y: firstSel.y, ser: firstSel.ser } : defaultLibPos(d.s);
-      D.y = pos.y; D.ser = seriesOffered(d.s, pos.ser) ? pos.ser : (SERIES.find((x) => seriesOffered(d.s, x.id)) || SERIES[1]).id;
-      render();
+    case 'gd-subj': ui.goals.draft.s = d.s; render(); break;
+    case 'gd-years': ui.goals.draft.showAll = !ui.goals.draft.showAll; render(); break;
+    case 'gd-dl': ui.goals.draft.deadline = d.d; render(); break;
+    case 'gd-clear': ui.goals.draft.keys = []; render(); break;
+    case 'gd-cell':
+      if (Date.now() < gselQuietUntil) break;
+      gridSetKeys([d.k], !ui.goals.draft.keys.includes(d.k));
       break;
-    }
-    case 'gd-year': ui.goals.draft.y = Number(d.y); render(); break;
-    case 'gd-ser': ui.goals.draft.ser = d.ser; render(); break;
-    case 'gd-tile': {
-      const D = ui.goals.draft;
-      const i = D.keys.indexOf(d.key);
-      if (i >= 0) D.keys.splice(i, 1); else D.keys.push(d.key);
-      render();
-      break;
-    }
-    case 'gd-all': {
-      const D = ui.goals.draft;
-      const ks = SUBJ[D.s].papers.flatMap((p) => variants(D.s, D.ser, p.id).map((v) => pkey(D.s, p.id, D.y, D.ser, v)));
-      const all = ks.every((k) => D.keys.includes(k));
-      if (all) D.keys = D.keys.filter((k) => !ks.includes(k));
-      else for (const k of ks) if (!D.keys.includes(k)) D.keys.push(k);
-      render();
+    case 'gd-row': case 'gd-col': case 'gd-yr': {
+      const D = ui.goals.draft, M = ui.gridModel;
+      const ks = [];
+      M.rows.forEach((r, ri) => M.cols.forEach((c, ci) => {
+        if (act === 'gd-row' && ri !== Number(d.r)) return;
+        if (act === 'gd-col' && ci !== Number(d.c)) return;
+        if (act === 'gd-yr' && r.y !== Number(d.y)) return;
+        const k = cellKey(D, r, c);
+        if (k) ks.push(k);
+      }));
+      const all = ks.length && ks.every((k) => D.keys.includes(k));
+      gridSetKeys(ks, !all);
       break;
     }
     case 'goal-toggle':
@@ -1879,6 +2341,25 @@ document.addEventListener('click', (ev) => {
         toast('Goal deleted. The papers in it are still in your Paper Library.');
       });
       break;
+    case 'goal-archive': ui.goals.archive = !ui.goals.archive; render(); break;
+    case 'goal-arch': case 'goal-restore': {
+      const g = state.goals[d.id];
+      if (!g) break;
+      const next = { ...g };
+      if (act === 'goal-arch') next.archived = true; else delete next.archived;
+      setRec(`g/${d.id}`, next);
+      ui.goals.open = null;
+      commit();
+      if (act === 'goal-arch') {
+        toast('Moved to the archive.', { action: 'Undo', onAction: () => { const n2 = { ...state.goals[d.id] }; delete n2.archived; setRec(`g/${d.id}`, n2); commit(); } });
+      } else toast('Goal restored.');
+      break;
+    }
+
+    /* Stats dashboard */
+    case 'stats-open': openStatsView(d.v); break;
+    case 'stats-back': closeStatsView(); break;
+    case 'dash-subj': openLib(d.s); break;
 
     /* Targets */
     case 't-step': {
@@ -1930,6 +2411,11 @@ document.addEventListener('click', (ev) => {
         commit();
         toast(`Every subject now targets ${selSummary(ui.tglobal)}.`);
       }, 'Tap again to replace every target');
+      break;
+    case 'dash-goal-new':
+      ui.goals.draft = newDraft();
+      ui.form = null;
+      go('goals');
       break;
     case 'goal-open':
       ui.goals.open = d.id;
@@ -2029,15 +2515,19 @@ function submitGoal(f) {
   D.deadline = f.elements.namedItem('deadline').value;
   const err = f.querySelector('.mf-err');
   const fail = (m) => { err.textContent = m; err.hidden = false; };
-  if (!D.title) return fail('Give the goal a name.');
-  if (!D.deadline) return fail('Pick a deadline.');
   if (!D.keys.length) return fail('Select at least one paper.');
+  if (!D.deadline) return fail('Pick a deadline.');
+  if (!D.title) D.title = autoGoalTitle(D.keys);
   const id = D.id || uid();
   setRec(`g/${id}`, { id, title: D.title, deadline: D.deadline, paperKeys: D.keys.slice(), createdAt: D.createdAt || Date.now() });
   ui.goals.draft = null;
   ui.goals.open = id;
+  const finished = D.keys.every((k) => state.lib[k] && state.lib[k].done);
+  if (finished) ui.goals.archive = true;
   commit();
-  toast(D.id ? 'Goal saved.' : 'Goal created.');
+  toast(finished ? 'Every paper in it is already done, so it went straight to Finished.' : D.id ? 'Goal saved.' : 'Goal created.');
+  const card = document.getElementById(`goal-${id}`);
+  if (card) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 document.addEventListener('input', (ev) => {
@@ -2135,8 +2625,9 @@ document.addEventListener('drop', (ev) => {
   }
 });
 
-window.addEventListener('beforeprint', () => { if (!document.body.classList.contains('printing')) renderAll(); });
-window.addEventListener('afterprint', () => { if (!document.body.classList.contains('printing')) render(); });
+let printByShortcut = false;
+window.addEventListener('beforeprint', () => { if (!document.body.classList.contains('printing')) { printByShortcut = true; document.body.classList.add('printing'); renderAll(); } });
+window.addEventListener('afterprint', () => { if (printByShortcut) { printByShortcut = false; document.body.classList.remove('printing'); render(); } });
 matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (LS.get('cd.theme', 'dark') === 'auto') { applyTheme(); render(); } });
 
 /* ───────────── app object used by sync.js ───────────── */
