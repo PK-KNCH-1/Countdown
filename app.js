@@ -108,7 +108,7 @@ const swatch = (sId, pId) => `<i class="sw" style="background:${col(sId, pId).bg
 
 /* ───────────── state, rebuilt from the record store ───────────── */
 
-let state = { entries: {}, targets: {}, lib: {}, goals: {}, tsel: {}, quiz: {}, qdays: {} };
+let state = { entries: {}, targets: {}, lib: {}, goals: {}, tsel: {}, quiz: {}, qdays: {}, qset: null };
 let derived = { doneBySp: {}, keysBySp: {}, recentKey: null };
 
 function applyRec(k, v) {
@@ -120,6 +120,7 @@ function applyRec(k, v) {
   else if (kind === 'ts') { if (v == null) delete state.tsel[rest]; else state.tsel[rest] = v; }
   else if (kind === 'q') { if (v == null) delete state.quiz[rest]; else state.quiz[rest] = v; }
   else if (kind === 'qd') { if (v == null) delete state.qdays[rest]; else state.qdays[rest] = v; }
+  else if (kind === 'qs') { if (rest === 'cfg') state.qset = v == null ? null : v; }
   else if (kind === 'e') {
     const j = rest.indexOf('/');
     const date = rest.slice(0, j), cell = rest.slice(j + 1);
@@ -135,7 +136,7 @@ function applyRec(k, v) {
 }
 
 function rebuild() {
-  state = { entries: {}, targets: {}, lib: {}, goals: {}, tsel: {}, quiz: {}, qdays: {} };
+  state = { entries: {}, targets: {}, lib: {}, goals: {}, tsel: {}, quiz: {}, qdays: {}, qset: null };
   for (const [k, r] of Object.entries(Store.rec)) if (r && r.v !== null) applyRec(k, r.v);
   derive();
 }
@@ -527,7 +528,7 @@ function quizTile() {
   const main = done
     ? `<p class="wt-big wt-ok">Done<small> today</small></p><p class="wt-sub">${today.c} of ${today.n} right</p>`
     : `<p class="wt-big">${left}<small> waiting</small></p><p class="wt-sub">${left ? `About ${Math.max(2, Math.round(left * 0.3))} minutes` : 'Nothing due'}</p>`;
-  return `<section class="wt" data-act="go" data-tab="quiz" aria-label="Chemistry quiz. Open the Quiz tab.">${tileHead('Chemistry quiz', 'data-act="go" data-tab="quiz"')}${main}
+  return `<section class="wt" data-act="go" data-tab="quiz" aria-label="Daily quiz. Open the Quiz tab.">${tileHead('Daily quiz', 'data-act="go" data-tab="quiz"')}${main}
     <p class="wt-foot">${streak ? `${streak}-day streak` : 'No streak yet'}</p></section>`;
 }
 
@@ -1149,7 +1150,7 @@ function renderSheet() {
   let inner = '';
   if (S.kind === 'day') inner = daySheetHTML(S);
   else if (S.kind === 'import') inner = importSheetHTML(S);
-  else if (S.kind === 'qzsheet') inner = qzSheetModalHTML();
+  else if (S.kind === 'qzsheet') inner = qzSheetModalHTML(S);
   root.innerHTML = `<div class="sheet-bg" data-act="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">${inner}</div></div>`;
   setupWheels(root);
   const first = root.querySelector('.sheet [autofocus]') || root.querySelector('.sheet h2');
@@ -1921,6 +1922,7 @@ function exportJSON() {
     targetSelection: state.tsel,
     quiz: state.quiz,
     quizDays: state.qdays,
+    quizSettings: state.qset,
     paperLibrary: state.lib,
     goals: Object.values(state.goals),
     lastBackup: new Date().toISOString(),
@@ -1987,6 +1989,7 @@ function readImport(obj) {
   }
   for (const [id, r] of Object.entries(obj.quiz || {})) if (QZ.BY_ID[id] && r && typeof r === 'object') recs[`q/${id}`] = r;
   for (const [d, r] of Object.entries(obj.quizDays || {})) if (/^\d{4}-\d{2}-\d{2}$/.test(d) && r && typeof r === 'object') recs[`qd/${d}`] = r;
+  if (obj.quizSettings && typeof obj.quizSettings === 'object') recs['qs/cfg'] = { off: Array.isArray(obj.quizSettings.off) ? obj.quizSettings.off.filter((x) => typeof x === 'string') : [], n: Number(obj.quizSettings.n) || QZ_NEW_DEFAULT };
   const goals = Array.isArray(obj.goals) ? obj.goals : Object.values(obj.goals || {});
   for (const g of goals) {
     if (!g || !g.id) continue;

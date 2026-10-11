@@ -1,6 +1,8 @@
-/* Countdown — daily Chemistry quiz: cation tests, anion tests, flame tests, solubility rules.
-   Facts and wording follow the Cambridge IGCSE Chemistry 0620 syllabus for 2026–2028
+/* Countdown — daily recall quiz.
+   This file holds the quiz engine and the Chemistry deck (cation tests, anion tests, flame tests,
+   solubility rules). Facts and wording follow the Cambridge IGCSE Chemistry 0620 syllabus for 2026–2028
    ("Notes for use in qualitative analysis" and the general solubility rules in 7.3).
+   Other subjects live in qz-*.js and register themselves with QZ.addTopics / QZ.addCard / QZ.defs.
 
    Scheduling is a simple Leitner system: each question sits in a box 1–5. A right answer
    moves it up a box and pushes it further away (1, 3, 7, 14, 30 days); a wrong answer
@@ -76,16 +78,31 @@ const QZ = (() => {
     ['f', 'Which hydroxides are soluble?', 'sodium, potassium and ammonium hydroxide, with calcium hydroxide partially soluble', ['all hydroxides', 'only sodium hydroxide', 'all except lead and silver hydroxide']],
   ];
 
-  const TOPICS = {
-    cat: 'Cation tests',
-    an: 'Anion tests',
-    fl: 'Flame tests',
-    sol: 'Solubility rules',
+  /* Subjects in the quiz, in the order they're shown. Names and colours come from data.js (SUBJ). */
+  const SUBJ_ORDER = ['chem', 'phys', 'bio', 'maths', 'econ'];
+  const SYLLABUS = {
+    chem: 'Cambridge IGCSE Chemistry 0620, 2026–2028 syllabus',
+    phys: 'Cambridge IGCSE Physics 0625, 2026–2028 syllabus',
+    bio: 'Cambridge IGCSE Biology 0610, 2026–2028 syllabus',
+    maths: 'Cambridge IGCSE Mathematics 0580 (Extended), 2025–2027 syllabus',
+    econ: 'Cambridge IGCSE Economics 0455, 2027–2029 syllabus',
   };
+  const TOPICS = {};
+  function addTopics(s, map) { for (const [t, name] of Object.entries(map)) TOPICS[t] = { name, s }; }
+  addTopics('chem', { cat: 'Cation tests', an: 'Anion tests', fl: 'Flame tests', sol: 'Solubility rules' });
 
   /* ── question bank ── */
   const CARDS = [];
-  const add = (id, topic, build) => CARDS.push({ id, topic, build });
+  const BY_ID = {};
+  function addCard(id, topic, build) {
+    if (BY_ID[id]) throw new Error(`Duplicate quiz card ${id}`);
+    if (!TOPICS[topic]) throw new Error(`Unknown quiz topic ${topic}`);
+    const c = { id, topic, s: TOPICS[topic].s, build };
+    CARDS.push(c);
+    BY_ID[id] = c;
+    return c;
+  }
+  const add = addCard;
   const catById = Object.fromEntries(CATIONS.map((c) => [c.id, c]));
   const anById = Object.fromEntries(ANIONS.map((a) => [a.id, a]));
   const flById = Object.fromEntries(FLAMES.map((f) => [f.id, f]));
@@ -325,15 +342,130 @@ const QZ = (() => {
     }));
   }
 
-  const BY_ID = Object.fromEntries(CARDS.map((c) => [c.id, c]));
-
-  /* New questions are introduced in an order that mixes the four topics every day. */
-  const NEW_ORDER = (() => {
-    const lists = Object.keys(TOPICS).map((t) => CARDS.filter((c) => c.topic === t).map((c) => c.id));
+  /* New questions are introduced in an order that mixes subjects, and topics within each subject, every day. */
+  const roundRobin = (lists) => {
     const out = [];
     for (let i = 0; lists.some((l) => i < l.length); i++) for (const l of lists) if (i < l.length) out.push(l[i]);
     return out;
-  })();
+  };
+  function subjectOrder(s) {
+    const topics = Object.keys(TOPICS).filter((t) => TOPICS[t].s === s);
+    return roundRobin(topics.map((t) => CARDS.filter((c) => c.topic === t).map((c) => c.id)));
+  }
+  function newOrder(subjects) { return roundRobin(subjects.map(subjectOrder)); }
+
+  /* ── definitions: fill-in-the-key-words and name-the-term questions ──
+     A definition is written with its key words in braces: 'the {net movement} of {water molecules} ...'.
+     Each time it comes up, up to three key words are blanked and offered among tempting wrong words. */
+  const OPPOSITE = {
+    higher: 'lower', lower: 'higher', increase: 'decrease', decrease: 'increase', increases: 'decreases', decreases: 'increases',
+    gain: 'loss', loss: 'gain', more: 'less', less: 'more', larger: 'smaller', smaller: 'larger', greater: 'smaller',
+    maximum: 'minimum', minimum: 'maximum', positive: 'negative', negative: 'positive', protons: 'neutrons', neutrons: 'protons',
+    single: 'double', double: 'single', identical: 'different', different: 'identical', same: 'different',
+    completely: 'partially', partially: 'completely', donors: 'acceptors', acceptors: 'donors', oxidised: 'reduced', reduced: 'oxidised',
+    oxidises: 'reduces', reduces: 'oxidises', haploid: 'diploid', diploid: 'haploid', 'two sets': 'a single set', 'a single set': 'two sets',
+    soluble: 'insoluble', insoluble: 'soluble', 'one-way': 'two-way', towards: 'away from', fall: 'rise', rise: 'fall', fertile: 'identical',
+    'unit mass': 'unit volume', 'unit volume': 'unit mass', 'unit area': 'unit length', 'unit time': 'unit distance', infinite: 'finite', finite: 'infinite',
+    'next best': 'most expensive', sustained: 'one-off', willingness: 'need', ability: 'desire', 'third parties': 'consumers',
+  };
+  const KEYPOOL = {};
+  const plainDef = (t) => t.replace(/[{}]/g, '');
+  const boldDef = (t) => t.replace(/\{([^}]+)\}/g, '<b>$1</b>');
+  function parseDef(text) {
+    const parts = [];
+    const re = /\{([^}]+)\}/g;
+    let last = 0, m;
+    while ((m = re.exec(text))) {
+      if (m.index > last) parts.push({ t: text.slice(last, m.index) });
+      parts.push({ k: m[1] });
+      last = re.lastIndex;
+    }
+    if (last < text.length) parts.push({ t: text.slice(last) });
+    return parts;
+  }
+  const lc = (w) => w.replace(/<[^>]+>/g, '').toLowerCase();
+  function defExplain(d) {
+    return `<p class="qz-def"><b class="qz-term">${d.term}</b> ${boldDef(d.text)}</p>${d.note ? `<p class="qz-note">${d.note}</p>` : ''}`;
+  }
+  /* Random filler words must never mean the same as an answer: skip near-synonyms and words that share
+     most of their content words with an answer ("energy from sunlight" vs "energy from light"). */
+  const SYN = [['rise', 'increase'], ['fall', 'decrease'], ['work done', 'energy'], ['energy transferred', 'energy'], ['time', 'time taken'], ['gametes', 'two gametes'], ['chemical reactions', 'metabolic reactions']];
+  const STOP = new Set(['a', 'an', 'the', 'of', 'from', 'to', 'in', 'and', 'or', 'for', 'by', 'with', 'per', 'on', 'is', 'are', 'its', 'their']);
+  const words = (w) => lc(w).split(/[^a-z0-9]+/).filter((x) => x && !STOP.has(x));
+  function tooClose(w, answers) {
+    const L = lc(w);
+    for (const a of answers) {
+      const A = lc(a);
+      if (L.includes(A) || A.includes(L)) return true;
+      if (SYN.some(([x, y]) => (x === L && y === A) || (x === A && y === L))) return true;
+      const wa = new Set(words(a)), ww = words(w);
+      const shared = ww.filter((x) => wa.has(x)).length;
+      if (shared && shared / Math.min(wa.size, ww.length) >= 0.5) return true;
+    }
+    return false;
+  }
+  function clozeQ(s, d) {
+    const parts = parseDef(d.text);
+    const keyIdx = parts.map((p, i) => (p.k ? i : -1)).filter((i) => i >= 0);
+    const blanks = keyIdx.length <= 3 ? keyIdx : shuffle(keyIdx.slice()).slice(0, 3).sort((a, b) => a - b);
+    const answers = blanks.map((i) => parts[i].k);
+    const taken = new Set(answers.map(lc));
+    const wrong = [];
+    const offer = (w) => { const L = lc(w); if (!taken.has(L) && !wrong.some((x) => lc(x) === L)) wrong.push(w); };
+    (d.x || []).forEach(offer);
+    answers.forEach((a) => { const o = OPPOSITE[lc(a)]; if (o) offer(o); });
+    const want = answers.length + 1 + (answers.length > 1 ? 1 : 2);
+    const pool = shuffle((KEYPOOL[s] || []).slice());
+    const allKeys = keyIdx.map((i) => parts[i].k);
+    for (const w of pool) { if (wrong.length >= want) break; if (!tooClose(w, allKeys)) offer(w); }
+    const bank = shuffle([...answers, ...wrong.slice(0, want)]);
+    // sw: groups of key words that may go in either order ("mass × velocity" = "velocity × mass")
+    const swap = answers.map((a) => { const g = (d.sw || []).findIndex((grp) => grp.some((x) => lc(x) === lc(a))); return g >= 0 ? g : null; });
+    return {
+      type: 'cloze', prompt: `Fill in the key words: <b>${d.term.replace(/:$/, '')}</b>`, parts, blanks, answers, bank, swap,
+      explain: defExplain(d),
+    };
+  }
+  /* Mark each blank. Blanks in the same swap group are right if, together, they hold that group's words in any order. */
+  function gradeCloze(q, chosen) {
+    const ok = chosen.map((w, j) => w != null && lc(w) === lc(q.answers[j]));
+    const groups = {};
+    q.swap.forEach((g, j) => { if (g != null) (groups[g] = groups[g] || []).push(j); });
+    for (const J of Object.values(groups)) {
+      const left = J.map((j) => lc(q.answers[j]));
+      for (const j of J) {
+        const w = chosen[j] == null ? null : lc(chosen[j]);
+        const k = w == null ? -1 : left.indexOf(w);
+        ok[j] = k >= 0;
+        if (k >= 0) left.splice(k, 1);
+      }
+    }
+    return ok;
+  }
+  function nameQ(d, list) {
+    const never = new Set([d.term, ...(d.nx || [])]);
+    const same = list.filter((x) => !never.has(x.term) && x.g && x.g === d.g).map((x) => x.term);
+    const rest = shuffle(list.filter((x) => !never.has(x.term) && !same.includes(x.term)).map((x) => x.term));
+    const wrong = shuffle(same).slice(0, 3);
+    for (const t of rest) { if (wrong.length >= 3) break; wrong.push(t); }
+    return {
+      prompt: `Which term is defined like this?<span class="qz-defq">${plainDef(d.text)}</span>`,
+      ...mcq(d.term, wrong),
+      explain: defExplain(d),
+    };
+  }
+  /* defs(subject, topic, list): one fill-in card per definition, plus a name-the-term card for those in a group (g). */
+  const DEFS = [];
+  const defsOf = (s) => DEFS.filter((x) => x.s === s);
+  function defs(s, topic, list) {
+    for (const d of list) DEFS.push({ s, topic, d });
+    const pool = KEYPOOL[s] || (KEYPOOL[s] = []);
+    for (const d of list) for (const p of parseDef(d.text)) if (p.k && !pool.includes(p.k)) pool.push(p.k);
+    for (const d of list) addCard(d.id, topic, () => clozeQ(s, d));
+    for (const d of list) if (d.g) addCard(`${d.id}-n`, topic, () => nameQ(d, list));
+  }
+  const fr = (a, b) => `<span class="fr"><span>${a}</span><span>${b}</span></span>`;
+  const SHEETS = {};
 
   /* ── helpers ── */
   function shuffle(a) {
@@ -352,14 +484,29 @@ const QZ = (() => {
     return { options: shuffle(opts) };
   }
 
-  return { CARDS, BY_ID, TOPICS, NEW_ORDER, CATIONS, ANIONS, FLAMES, RULES, GAS_TESTS, shuffle, catVisual, anVisual, solGridHTML, legendHTML, FL_HEX };
+  return {
+    CARDS, BY_ID, TOPICS, SUBJ_ORDER, SYLLABUS, SHEETS, CATIONS, ANIONS, FLAMES, RULES, GAS_TESTS,
+    addTopics, addCard, defs, defsOf, defExplain, gradeCloze, boldDef, plainDef, newOrder, shuffle, mcq, pickDistinct, fr, tube, PC,
+    catVisual, anVisual, solGridHTML, legendHTML, FL_HEX,
+  };
 })();
 
-/* ───────────── scheduling ───────────── */
+/* ───────────── settings and scheduling ───────────── */
 
 const QZ_INTERVALS = { 1: 1, 2: 3, 3: 7, 4: 14, 5: 30 };
-const QZ_NEW_PER_DAY = 15;
 const QZ_MAX_DUE = 40;
+const QZ_NEW_CHOICES = [10, 15, 20, 25, 30];
+const QZ_NEW_DEFAULT = 20;
+
+/* Settings sync as one record, qs/cfg: { off: [subjects switched off], n: new questions a day }. */
+function qzCfg() {
+  const c = state.qset || {};
+  const off = Array.isArray(c.off) ? c.off : [];
+  return { off, n: QZ_NEW_CHOICES.includes(c.n) ? c.n : QZ_NEW_DEFAULT };
+}
+const qzSubjHas = (s) => QZ.CARDS.some((c) => c.s === s);
+function qzOnSubjects() { const { off } = qzCfg(); return QZ.SUBJ_ORDER.filter((s) => qzSubjHas(s) && !off.includes(s)); }
+const qzIsOn = (s) => qzOnSubjects().includes(s);
 
 function qzRec(id) { return state.quiz[id]; }
 
@@ -368,16 +515,17 @@ function qzIntroducedToday() {
   return Object.values(state.quiz).filter((r) => r && r.f === t).length;
 }
 
-function qzDueToday() {
+function qzDueToday(subjects) {
   const t = todayISO();
-  return QZ.CARDS.filter((c) => { const r = qzRec(c.id); return r && r.d <= t; })
+  const on = new Set(subjects || qzOnSubjects());
+  return QZ.CARDS.filter((c) => { const r = qzRec(c.id); return on.has(c.s) && r && r.d <= t; })
     .sort((a, b) => (qzRec(a.id).d.localeCompare(qzRec(b.id).d)) || (qzRec(a.id).b - qzRec(b.id).b))
     .slice(0, QZ_MAX_DUE).map((c) => c.id);
 }
 
-function qzNewToday(limit) {
-  const n = limit != null ? limit : Math.max(0, QZ_NEW_PER_DAY - qzIntroducedToday());
-  return QZ.NEW_ORDER.filter((id) => !qzRec(id)).slice(0, n);
+function qzNewToday(limit, subjects) {
+  const n = limit != null ? limit : Math.max(0, qzCfg().n - qzIntroducedToday());
+  return QZ.newOrder(subjects || qzOnSubjects()).filter((id) => !qzRec(id)).slice(0, n);
 }
 
 function qzTodayQueue() {
@@ -402,16 +550,17 @@ function qzStreak() {
   return n;
 }
 
-function qzMastery(topic) {
-  const cards = QZ.CARDS.filter((c) => c.topic === topic);
+function qzMasteryOf(cards) {
   const secure = cards.filter((c) => { const r = qzRec(c.id); return r && r.b >= 3; }).length;
   const seen = cards.filter((c) => qzRec(c.id)).length;
   return { total: cards.length, secure, seen };
 }
+const qzMastery = (topic) => qzMasteryOf(QZ.CARDS.filter((c) => c.topic === topic));
+const qzSubjMastery = (s) => qzMasteryOf(QZ.CARDS.filter((c) => c.s === s));
 
 /* ───────────── rendering ───────────── */
 
-const CHEM_HUE = 20;
+const qzSubjName = (s) => (SUBJ[s] ? SUBJ[s].name : s);
 
 function renderQuiz() {
   const el = $('#v-quiz');
@@ -422,37 +571,57 @@ function renderQuiz() {
   const due = qzDueToday().length, fresh = qzNewToday().length;
   const today = state.qdays[todayISO()];
   const streak = qzStreak();
-  const unseen = QZ.CARDS.filter((c) => !qzRec(c.id)).length;
+  const cfg = qzCfg();
+  const on = qzOnSubjects();
+  const unseen = QZ.CARDS.filter((c) => on.includes(c.s) && !qzRec(c.id)).length;
   const last14 = [...Array(14)].map((_, i) => addDays(todayISO(), i - 13));
+  const subjects = QZ.SUBJ_ORDER.filter(qzSubjHas);
+  const open = ui.qzOpen;
   el.innerHTML = `
-    <div class="view-head"><h2 class="h">Chemistry quiz</h2></div>
-    <p class="fine">Cation tests, anion tests, flame tests and solubility rules, using the wording in Cambridge’s 0620 syllabus. “ppt.” means precipitate, as in the exam.</p>
+    <div class="view-head"><h2 class="h">Daily quiz</h2></div>
+    <p class="fine">A few minutes a day on the things you have to know by heart: tests, equations, values and definitions, worded the way each Cambridge syllabus words them.</p>
     <section class="block qz-today">
       ${left
         ? `<p class="qz-big"><b>${left}</b> question${left === 1 ? '' : 's'} today</p><p class="fine">${due ? `${due} to review` : 'Nothing to review yet'}${fresh ? `, ${fresh} new` : ''}. About ${Math.max(2, Math.round(left * 0.3))} minutes.</p>
-           <div class="btn-row"><button class="btn primary" data-act="qz-start">${today && today.n ? 'Continue today’s quiz' : 'Start today’s quiz'}</button><button class="btn" data-act="qz-sheet">Cheat sheet</button></div>`
+           <div class="btn-row"><button class="btn primary" data-act="qz-start">${today && today.n ? 'Continue today’s quiz' : 'Start today’s quiz'}</button><button class="btn" data-act="qz-sheet">Cheat sheets</button></div>`
         : `<p class="qz-big"><b>Done</b> for today</p><p class="fine">${today ? `${today.c} of ${today.n} right today. ` : ''}${unseen ? `${unseen} questions you haven’t seen yet.` : 'You’ve seen every question.'}</p>
-           <div class="btn-row"><button class="btn" data-act="qz-more">Practise 10 more</button><button class="btn" data-act="qz-sheet">Cheat sheet</button></div>`}
+           <div class="btn-row"><button class="btn" data-act="qz-more">Practise 10 more</button><button class="btn" data-act="qz-sheet">Cheat sheets</button></div>`}
       <div class="qz-streakrow"><span class="qz-streak">${streak ? `${streak}-day streak` : 'Finish today’s quiz to start a streak'}</span>
         <span class="qz-days" aria-label="Last 14 days">${last14.map((d) => { const r = state.qdays[d]; return `<i class="${r && r.done ? 'on' : r && r.n ? 'part' : ''}${d === todayISO() ? ' today' : ''}" title="${fmtDate(d)}${r ? `: ${r.c}/${r.n}` : ''}"></i>`; }).join('')}</span></div>
     </section>
     <section class="block">
-      <h3 class="h">How well you know each topic</h3>
-      <p class="fine">“Secure” means answered right at least three times in a row, with days in between.</p>
-      <ul class="tpapers">${Object.entries(QZ.TOPICS).map(([t, name]) => { const m = qzMastery(t); return `<li><span>${name}</span><span class="tp-bar" aria-hidden="true"><i style="width:${(m.secure / m.total) * 100}%;background:hsl(${CHEM_HUE} 60% 50%)"></i></span><span class="tp-n"><b>${m.secure}</b>/${m.total}</span></li>`; }).join('')}</ul>
+      <h3 class="h">Subjects</h3>
+      <p class="fine">Switch a subject off to leave it out of the daily quiz. “Secure” means answered right at least three times in a row, with days in between.</p>
+      <ul class="qz-slist">${subjects.map((s) => {
+        const m = qzSubjMastery(s);
+        const isOn = !cfg.off.includes(s);
+        const c = col(s);
+        const topics = Object.keys(QZ.TOPICS).filter((t) => QZ.TOPICS[t].s === s);
+        return `<li class="qz-s${isOn ? '' : ' off'}${open === s ? ' open' : ''}">
+          <div class="qz-srow">
+            <button class="qz-sw" role="switch" aria-checked="${isOn}" data-act="qz-toggle" data-s="${s}" aria-label="Include ${esc(qzSubjName(s))} in the daily quiz"><span aria-hidden="true"></span></button>
+            <button class="qz-sname" data-act="qz-sopen" data-s="${s}" aria-expanded="${open === s}"><b>${esc(qzSubjName(s))}</b><small>${m.secure}/${m.total} secure${m.seen < m.total ? ` · ${m.total - m.seen} new` : ''}</small></button>
+            <span class="tp-bar qz-sbar" aria-hidden="true"><i style="width:${m.total ? (m.secure / m.total) * 100 : 0}%;background:${c.bg}"></i><i class="seen" style="width:${m.total ? ((m.seen - m.secure) / m.total) * 100 : 0}%;background:${c.bg}"></i></span>
+          </div>
+          ${open === s ? `<ul class="tpapers qz-topics">${topics.map((t) => { const tm = qzMastery(t); return `<li><span>${esc(QZ.TOPICS[t].name)}</span><span class="tp-bar" aria-hidden="true"><i style="width:${(tm.secure / tm.total) * 100}%;background:${c.bg}"></i></span><span class="tp-n"><b>${tm.secure}</b>/${tm.total}</span></li>`; }).join('')}</ul>
+            <div class="btn-row qz-sacts"><button class="btn small" data-act="qz-prac" data-s="${s}">Practise 10 ${esc(qzSubjName(s))}</button><button class="btn small" data-act="qz-sheet" data-s="${s}">${esc(qzSubjName(s))} cheat sheet</button></div>` : ''}
+        </li>`;
+      }).join('')}</ul>
+      <div class="qz-newrow"><span id="qzNewLbl">New questions a day</span>
+        <div class="qz-seg" role="radiogroup" aria-labelledby="qzNewLbl">${QZ_NEW_CHOICES.map((n) => `<button role="radio" aria-checked="${cfg.n === n}" class="${cfg.n === n ? 'on' : ''}" data-act="qz-newn" data-n="${n}">${n}</button>`).join('')}</div>
+      </div>
     </section>
     <section class="block qz-sheetcard">
-      <div><h3 class="h">Cheat sheet</h3><p class="fine">All four tables, word for word from the syllabus. Read it before your first quiz.</p></div>
-      <button class="btn" data-act="qz-sheet">Open cheat sheet</button>
+      <div><h3 class="h">Cheat sheets</h3><p class="fine">Everything in the quiz on one page per subject. Read one before you start a new subject.</p></div>
+      <div class="qz-sheetbtns">${subjects.map((s) => `<button class="btn small" data-act="qz-sheet" data-s="${s}" style="--sc:${col(s).bg}"><i class="sw" style="background:${col(s).bg}" aria-hidden="true"></i>${esc(qzSubjName(s))}</button>`).join('')}</div>
     </section>`;
 }
 
-const FLAME_SWATCH = { li: '#d8312c', na: '#f2c21b', k: '#b48ad8', ca: '#f0743a', ba: '#9bd56b', cu: '#2fb5a2' };
-
-function qzSheetHTML() {
+/* Chemistry cheat sheet: the four test tables, then the definitions. */
+function qzChemSheetHTML() {
   return `<div class="qz-sheet">
     <nav class="qz-jump" aria-label="Jump to">
-      <button data-act="qz-jump" data-to="qzs-cat">Cations</button><button data-act="qz-jump" data-to="qzs-an">Anions</button><button data-act="qz-jump" data-to="qzs-fl">Flame tests</button><button data-act="qz-jump" data-to="qzs-sol">Solubility</button>
+      <button data-act="qz-jump" data-to="qzs-cat">Cations</button><button data-act="qz-jump" data-to="qzs-an">Anions</button><button data-act="qz-jump" data-to="qzs-fl">Flame tests</button><button data-act="qz-jump" data-to="qzs-sol">Solubility</button>${QZ.defsOf('chem').length ? '<button data-act="qz-jump" data-to="qzs-def">Definitions</button>' : ''}
     </nav>
     <h4 id="qzs-cat">Tests for aqueous cations</h4>
     ${QZ.legendHTML('cat')}
@@ -467,21 +636,66 @@ function qzSheetHTML() {
     </li>`).join('')}</ul>
     <p class="fine">Gas tests used above: carbon dioxide turns limewater milky; ammonia turns damp red litmus paper blue.</p>
     <h4 id="qzs-fl">Flame tests</h4>
-    <ul class="qz-flames">${QZ.FLAMES.map((f) => `<li><i class="qzv-flame" style="--fc:${FLAME_SWATCH[f.id]}" aria-hidden="true"></i><span class="qz-ion">${f.ion} <small>${f.name}</small></span><b>${f.colour}</b></li>`).join('')}</ul>
+    <ul class="qz-flames">${QZ.FLAMES.map((f) => `<li><i class="qzv-flame" style="--fc:${QZ.FL_HEX[f.id]}" aria-hidden="true"></i><span class="qz-ion">${f.ion} <small>${f.name}</small></span><b>${f.colour}</b></li>`).join('')}</ul>
     <p class="fine">The colour dots are only a memory aid. In the exam, use the colour words exactly as listed.</p>
     <h4 id="qzs-sol">Solubility rules for salts</h4>
     ${QZ.legendHTML('sol')}
     ${QZ.solGridHTML()}
     <p class="fine">“Most others” means salts of other metals, such as copper(II), iron or zinc. A dash means the six rules don’t cover it.</p>
     <ol class="qz-rules">${Object.values(QZ.RULES).map((r) => `<li>${r}</li>`).join('')}</ol>
+    ${QZ.defsOf('chem').length ? `<h4 id="qzs-def">Definitions</h4>${qzDefsListHTML('chem')}` : ''}
   </div>`;
 }
+QZ.SHEETS.chem = qzChemSheetHTML;
 
-function qzSheetModalHTML() {
-  return `<div class="sheet-h"><h2 id="sheetTitle">Cheat sheet</h2><button class="icon-btn" data-act="sheet-close" aria-label="Close">×</button></div>
-    <p class="fine">From the Cambridge IGCSE Chemistry 0620 syllabus, 2026–2028. “ppt.” means precipitate.</p>
-    ${qzSheetHTML()}
+/* Every definition for a subject, grouped by topic, key words in bold. */
+function qzDefsListHTML(s, topics) {
+  const groups = {};
+  for (const { topic, d } of QZ.defsOf(s)) if (!topics || topics.includes(topic)) (groups[topic] = groups[topic] || []).push(d);
+  return Object.entries(groups).map(([t, list]) => `<h5 class="qz-sh5">${esc(QZ.TOPICS[t].name.replace(/^Definitions: /, ''))}</h5>
+    <dl class="qz-defs">${list.map((d) => `<div><dt>${d.term}</dt><dd>${QZ.boldDef(d.text)}${d.note ? `<small>${d.note}</small>` : ''}</dd></div>`).join('')}</dl>`).join('');
+}
+
+function qzSheetModalHTML(S) {
+  const subjects = QZ.SUBJ_ORDER.filter(qzSubjHas);
+  const s = subjects.includes(S && S.s) ? S.s : subjects[0];
+  return `<div class="sheet-h"><h2 id="sheetTitle">${esc(qzSubjName(s))} cheat sheet</h2><button class="icon-btn" data-act="sheet-close" aria-label="Close">×</button></div>
+    <div class="qz-stabs" role="tablist" aria-label="Subject">${subjects.map((x) => `<button role="tab" aria-selected="${x === s}" class="${x === s ? 'on' : ''}" data-act="qz-sheet" data-s="${x}" style="--sc:${col(x).bg}">${esc(qzSubjName(x))}</button>`).join('')}</div>
+    <p class="fine">From the ${QZ.SYLLABUS[s]}. Key words are in bold: they are what the examiner looks for.</p>
+    ${QZ.SHEETS[s] ? QZ.SHEETS[s]() : qzDefsListHTML(s)}
     <div class="sheet-f"><button class="btn" data-act="sheet-close">Close</button></div>`;
+}
+
+function qzClozeHTML(Q) {
+  const q = Q.q, C = Q.cloze;
+  const text = q.parts.map((p, i) => {
+    if (p.t) return p.t;
+    const j = q.blanks.indexOf(i);
+    if (j < 0) return p.k;
+    const f = C.fill[j];
+    if (Q.answered) {
+      const ok = C.ok[j];
+      return `<span class="qz-blank ${ok ? 'right' : 'wrong'}">${ok ? q.bank[f] : `<s>${f != null ? q.bank[f] : '—'}</s> ${q.answers[j]}`}</span>`;
+    }
+    return `<button class="qz-blank${f != null ? ' full' : ''}${C.active === j ? ' active' : ''}" data-act="qz-bl" data-j="${j}" aria-label="${f != null ? `Blank ${j + 1}: ${lcText(q.bank[f])}. Tap to clear.` : `Blank ${j + 1}, empty`}">${f != null ? q.bank[f] : '&nbsp;'}</button>`;
+  }).join('');
+  const used = new Set(C.fill.filter((x) => x != null));
+  const allFilled = C.fill.every((x) => x != null);
+  return `<p class="qz-cloze">${text}</p>
+    ${Q.answered ? '' : `<div class="qz-bank" aria-label="Word bank">${q.bank.map((w, i) => `<button class="qz-chip${used.has(i) ? ' used' : ''}" data-act="qz-ch" data-i="${i}" ${used.has(i) ? 'disabled' : ''}>${w}</button>`).join('')}</div>
+      <p class="fine">${allFilled ? 'Happy with it? Check your answer.' : 'Tap a word to put it in the highlighted gap. Tap a filled gap to clear it.'}</p>
+      ${allFilled ? '<button class="btn primary qz-check" data-act="qz-check">Check</button>' : ''}`}
+    ${Q.answered ? `<div class="qz-fb ${Q.correct ? 'right' : 'wrong'}"><b>${Q.correct ? 'Correct' : `${C.ok.filter(Boolean).length} of ${C.ok.length} right`}</b><div class="qz-exp">${q.explain}</div></div>` : ''}`;
+}
+const lcText = (h) => String(h).replace(/<[^>]+>/g, '');
+
+function qzOrderHTML(Q) {
+  const q = Q.q, O = Q.order;
+  const done = O.placed.length;
+  return `<ol class="qz-placed">${q.items.map((it, i) => `<li class="${i < done ? 'ok' : ''}">${i < done ? it : '&nbsp;'}</li>`).join('')}</ol>
+    ${Q.answered ? '' : `<div class="qz-bank">${O.shuffled.map((i) => `<button class="qz-chip${O.placed.includes(i) ? ' used' : ''}${O.bad === i ? ' bad' : ''}" data-act="qz-or" data-i="${i}" ${O.placed.includes(i) ? 'disabled' : ''}>${q.items[i]}</button>`).join('')}</div>
+      <p class="fine">Tap them in order, starting with ${q.first}.</p>`}
+    ${Q.answered ? `<div class="qz-fb ${O.mistakes ? 'wrong' : 'right'}"><b>${O.mistakes ? `In order, with ${O.mistakes} slip${O.mistakes === 1 ? '' : 's'}` : 'All in order first time'}</b><div class="qz-exp">${q.explain}</div></div>` : ''}`;
 }
 
 function qzSessionHTML(Q) {
@@ -489,6 +703,7 @@ function qzSessionHTML(Q) {
   const q = Q.q;
   const total = Q.queue.length;
   const pct = (Q.i / total) * 100;
+  const card = QZ.BY_ID[item.id];
   let body;
   if (q.type === 'match') {
     const m = Q.match;
@@ -496,23 +711,27 @@ function qzSessionHTML(Q) {
       <div class="qz-col">${m.left.map((L, i) => `<button class="qz-m${m.done.includes(i) ? ' ok' : ''}${m.sel === i ? ' sel' : ''}${m.bad && m.bad[0] === i ? ' bad' : ''}" data-act="qz-ml" data-i="${i}" ${m.done.includes(i) ? 'disabled' : ''}>${L}</button>`).join('')}</div>
       <div class="qz-col">${m.right.map((R, j) => { const usedBy = m.done.find((i) => m.answer[i] === j); return `<button class="qz-m${usedBy != null ? ' ok' : ''}${m.bad && m.bad[1] === j ? ' bad' : ''}" data-act="qz-mr" data-j="${j}" ${usedBy != null ? 'disabled' : ''}>${R}</button>`; }).join('')}</div>
     </div>
-    ${Q.answered ? `<div class="qz-fb ${m.mistakes ? 'wrong' : 'right'}"><b>${m.mistakes ? `Matched with ${m.mistakes} mistake${m.mistakes === 1 ? '' : 's'}` : 'All matched first time'}</b><p>${q.explain}</p></div>` : `<p class="fine">Tap an item on the left, then its match on the right.</p>`}`;
+    ${Q.answered ? `<div class="qz-fb ${m.mistakes ? 'wrong' : 'right'}"><b>${m.mistakes ? `Matched with ${m.mistakes} mistake${m.mistakes === 1 ? '' : 's'}` : 'All matched first time'}</b><div class="qz-exp">${q.explain}</div></div>` : `<p class="fine">Tap an item on the left, then its match on the right.</p>`}`;
+  } else if (q.type === 'cloze') {
+    body = qzClozeHTML(Q);
+  } else if (q.type === 'order') {
+    body = qzOrderHTML(Q);
   } else {
-    body = `<div class="qz-opts">${q.options.map((o, i) => {
+    body = `${q.visual ? `<div class="qz-visual">${q.visual}</div>` : ''}<div class="qz-opts">${q.options.map((o, i) => {
       let cls = 'qz-opt';
       if (Q.answered) { if (o.correct) cls += ' right'; else if (i === Q.picked) cls += ' wrong'; }
       return `<button class="${cls}" data-act="qz-pick" data-i="${i}" ${Q.answered ? 'disabled' : ''}>${o.html}</button>`;
     }).join('')}</div>
-    ${Q.answered ? `<div class="qz-fb ${q.options[Q.picked].correct ? 'right' : 'wrong'}"><b>${q.options[Q.picked].correct ? 'Correct' : 'Not quite'}</b><p>${q.explain}</p></div>` : ''}`;
+    ${Q.answered ? `<div class="qz-fb ${q.options[Q.picked].correct ? 'right' : 'wrong'}"><b>${q.options[Q.picked].correct ? 'Correct' : 'Not quite'}</b><div class="qz-exp">${q.explain}</div></div>` : ''}`;
   }
   return `<div class="qz-top">
       <button class="link" data-act="qz-stop">Stop for now</button>
-      <button class="link" data-act="qz-sheet">Cheat sheet</button>
+      <button class="link" data-act="qz-sheet" data-s="${card.s}">Cheat sheet</button>
       <span class="qz-prog" aria-hidden="true"><i style="width:${pct}%"></i></span>
       <span class="qz-count">${Q.i + 1} of ${total}</span>
     </div>
-    <section class="block qz-card">
-      <p class="qz-topic">${QZ.TOPICS[QZ.BY_ID[item.id].topic]}${item.relearn ? ' · one more try' : ''}${!qzRec(item.id) && !item.relearn ? ' · new' : ''}</p>
+    <section class="block qz-card" style="--qc:${col(card.s).bg}">
+      <p class="qz-topic"><i class="sw" style="background:${col(card.s).bg}" aria-hidden="true"></i>${esc(qzSubjName(card.s))} · ${esc(QZ.TOPICS[card.topic].name)}${item.relearn ? ' · one more try' : ''}${!qzRec(item.id) && !item.relearn ? ' · new' : ''}</p>
       <h3 class="qz-q">${q.prompt}</h3>
       ${body}
       ${Q.answered ? `<button class="btn primary qz-next" data-act="qz-next">${Q.i + 1 < total ? 'Next' : 'Finish'}</button>` : ''}
@@ -524,13 +743,13 @@ function qzDoneHTML(Q) {
   const wrong = Q.results.filter((r) => !r.correct);
   const streak = qzStreak();
   const left = qzTodayQueue().length;
-  return `<div class="view-head"><h2 class="h">Chemistry quiz</h2></div>
+  return `<div class="view-head"><h2 class="h">Daily quiz</h2></div>
     <section class="block qz-today">
       <p class="qz-big"><b>${right}</b> of ${Q.results.length} right</p>
       <p class="fine">${left ? `${left} still to do today.` : `Today’s quiz is done.${streak ? ` ${streak}-day streak.` : ''}`} Questions you missed come back tomorrow.</p>
       <div class="btn-row">${left ? '<button class="btn primary" data-act="qz-start">Keep going</button>' : '<button class="btn" data-act="qz-more">Practise 10 more</button>'}<button class="btn" data-act="qz-home">Back to quiz home</button></div>
     </section>
-    ${wrong.length ? `<section class="block"><h3 class="h">Worth another look</h3><ul class="qz-review">${wrong.map((r) => `<li><p>${r.prompt}</p><p class="qz-ans">${r.explain}</p></li>`).join('')}</ul></section>` : ''}`;
+    ${wrong.length ? `<section class="block"><h3 class="h">Worth another look</h3><ul class="qz-review">${wrong.map((r) => `<li><p>${r.prompt}</p><div class="qz-ans">${r.explain}</div></li>`).join('')}</ul></section>` : ''}`;
 }
 
 /* ───────────── session control ───────────── */
@@ -541,6 +760,7 @@ function qzBuild(item) {
   ui.qz.q = q;
   ui.qz.answered = false;
   ui.qz.picked = null;
+  ui.qz.correct = null;
   if (q.type === 'match') {
     const order = QZ.shuffle(q.pairs.map((_, i) => i));
     ui.qz.match = {
@@ -550,10 +770,12 @@ function qzBuild(item) {
       done: [], sel: null, mistakes: 0, bad: null,
     };
   }
+  if (q.type === 'cloze') ui.qz.cloze = { fill: q.blanks.map(() => null), active: 0, ok: [] };
+  if (q.type === 'order') ui.qz.order = { shuffled: QZ.shuffle(q.items.map((_, i) => i)), placed: [], mistakes: 0, bad: null };
 }
 
 function qzStart(queueIds) {
-  const ids = queueIds || qzTodayQueue();
+  const ids = (queueIds || qzTodayQueue()).filter((id) => QZ.BY_ID[id]);
   if (!ids.length) { toast('Nothing left for today. Practise more if you like.'); render(); return; }
   ui.qz = { active: true, queue: ids.map((id) => ({ id })), i: 0, results: [] };
   qzBuild(ui.qz.queue[0]);
@@ -564,6 +786,7 @@ function qzAnswer(correct) {
   const Q = ui.qz;
   const item = Q.queue[Q.i];
   Q.answered = true;
+  Q.correct = correct;
   if (!item.relearn) {
     qzGrade(item.id, correct);
     Q.results.push({ id: item.id, correct, prompt: Q.q.prompt, explain: Q.q.explain });
@@ -576,17 +799,36 @@ function qzAnswer(correct) {
   if (next) next.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 }
 
+/* Ten questions to practise: unseen ones first (in the usual order), then the weakest ones you've seen. */
+function qzPracticeSet(subjects, n = 10) {
+  const fresh = QZ.newOrder(subjects).filter((id) => !qzRec(id)).slice(0, n);
+  if (fresh.length >= n) return QZ.shuffle(fresh);
+  const seen = QZ.shuffle(QZ.CARDS.filter((c) => subjects.includes(c.s) && qzRec(c.id)).map((c) => c.id))
+    .sort((a, b) => (qzRec(a).b || 0) - (qzRec(b).b || 0)).slice(0, n - fresh.length);
+  return QZ.shuffle(fresh.concat(seen));
+}
+
+function qzSetCfg(patch) {
+  const c = { ...qzCfg(), ...patch };
+  setRec('qs/cfg', { off: c.off, n: c.n });
+  commit();
+}
+
 function quizClick(el, act, d) {
   const Q = ui.qz;
   switch (act) {
     case 'qz-start': qzStart(); break;
-    case 'qz-more': {
-      const fresh = qzNewToday(10);
-      const pool = fresh.length >= 10 ? fresh : fresh.concat(QZ.shuffle(QZ.CARDS.map((c) => c.id).filter((id) => !fresh.includes(id)))
-        .sort((a, b) => ((qzRec(a) || {}).b || 0) - ((qzRec(b) || {}).b || 0)).slice(0, 10 - fresh.length));
-      qzStart(QZ.shuffle(pool));
+    case 'qz-more': qzStart(qzPracticeSet(qzOnSubjects())); break;
+    case 'qz-prac': qzStart(qzPracticeSet([d.s])); break;
+    case 'qz-toggle': {
+      const { off } = qzCfg();
+      const turningOff = !off.includes(d.s);
+      if (turningOff && qzOnSubjects().length <= 1) { toast('Keep at least one subject in the quiz.'); break; }
+      qzSetCfg({ off: turningOff ? [...off, d.s] : off.filter((x) => x !== d.s) });
       break;
     }
+    case 'qz-sopen': ui.qzOpen = ui.qzOpen === d.s ? null : d.s; renderQuiz(); break;
+    case 'qz-newn': qzSetCfg({ n: Number(d.n) }); break;
     case 'qz-pick':
       if (!Q || Q.answered) return;
       Q.picked = Number(d.i);
@@ -609,6 +851,44 @@ function quizClick(el, act, d) {
       renderQuiz();
       break;
     }
+    case 'qz-ch': {
+      if (!Q || Q.answered || !Q.cloze) return;
+      const C = Q.cloze;
+      let j = C.active != null && C.fill[C.active] == null ? C.active : C.fill.indexOf(null);
+      if (j < 0) return;
+      C.fill[j] = Number(d.i);
+      const nextEmpty = C.fill.findIndex((x, k) => x == null && k > j);
+      C.active = nextEmpty >= 0 ? nextEmpty : C.fill.indexOf(null);
+      renderQuiz();
+      break;
+    }
+    case 'qz-bl': {
+      if (!Q || Q.answered || !Q.cloze) return;
+      const j = Number(d.j);
+      Q.cloze.fill[j] = null;
+      Q.cloze.active = j;
+      renderQuiz();
+      break;
+    }
+    case 'qz-check': {
+      if (!Q || Q.answered || !Q.cloze) return;
+      const C = Q.cloze;
+      C.ok = QZ.gradeCloze(Q.q, C.fill.map((f) => (f == null ? null : Q.q.bank[f])));
+      qzAnswer(C.ok.every(Boolean));
+      break;
+    }
+    case 'qz-or': {
+      if (!Q || Q.answered || !Q.order) return;
+      const O = Q.order, i = Number(d.i);
+      if (i === O.placed.length) {
+        O.placed.push(i); O.bad = null;
+        if (O.placed.length === Q.q.items.length) { qzAnswer(O.mistakes === 0); return; }
+      } else {
+        O.mistakes++; O.bad = i;
+      }
+      renderQuiz();
+      break;
+    }
     case 'qz-next':
       if (!Q) return;
       Q.i++;
@@ -622,7 +902,15 @@ function quizClick(el, act, d) {
       render();
       break;
     case 'qz-home': ui.qz = null; render(); break;
-    case 'qz-sheet': ui.sheet = { kind: 'qzsheet' }; renderSheet(); break;
+    case 'qz-sheet': {
+      const s = d.s || ui.qzSheetS || qzOnSubjects()[0];
+      ui.qzSheetS = s;
+      const was = ui.sheet && ui.sheet.kind === 'qzsheet';
+      ui.sheet = { kind: 'qzsheet', s };
+      renderSheet();
+      if (was) { const sh = document.querySelector('.sheet'); if (sh) sh.scrollTop = 0; }
+      break;
+    }
     case 'qz-jump': {
       const t = document.getElementById(d.to);
       if (t) t.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });

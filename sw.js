@@ -1,8 +1,8 @@
 /* Countdown service worker: keeps the app usable offline.
    App files: network first, falling back to the saved copy.
    Fonts: saved copy first. Sync calls are never cached. */
-const VERSION = 'countdown-v6';
-const SHELL = ['./', 'index.html', 'style.css?v=6', 'data.js?v=6', 'sync.js?v=6', 'quiz.js?v=6', 'app.js?v=6', 'config.js?v=6', 'manifest.webmanifest', 'icons/icon-192.png'];
+const VERSION = 'countdown-v7';
+const SHELL = ['./', 'index.html', 'style.css?v=7', 'data.js?v=7', 'sync.js?v=7', 'quiz.js?v=7', 'qz-chem.js?v=7', 'qz-phys.js?v=7', 'qz-bio.js?v=7', 'qz-maths.js?v=7', 'qz-econ.js?v=7', 'app.js?v=7', 'config.js?v=7', 'manifest.webmanifest', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
