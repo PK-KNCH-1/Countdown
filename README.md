@@ -41,7 +41,7 @@ Short daily recall across Chemistry, Physics, Biology, Maths and Economics, with
 a choice of 10–30 new questions a day. Questions follow a Leitner schedule (1, 3, 7, 14, 30 days) and are
 stored as `q/<id>` records, so progress syncs. Definitions are written with their key words in braces and
 asked as fill-in-the-key-words questions; wording follows each subject's current Cambridge syllabus
-(0610/0620/0625 2026–2028, 0580 2025–2027, 0455 2027–2029). Each deck adds its own cheat sheet.
+(0610/0620/0625 2026–2028, 0607 2025–2027, 0455 2027–2029). Each deck adds its own cheat sheet.
 
 ## Moving data from the old app
 

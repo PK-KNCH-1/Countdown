@@ -73,26 +73,27 @@ const PP_AVAILABILITY = (() => {
 
 /* The official final timetable, Zone 4 (India), Feb/March 2027. */
 const EXAMS = [
-  { date: '2027-01-27', s: 'ict', p: 'p2', title: 'Practical Test A', code: '0417/21', session: 'School-set window' },
-  { date: '2027-02-02', s: 'ict', p: 'p3', title: 'Practical Test B', code: '0417/31', session: 'School-set window' },
-  { date: '2027-02-03', s: 'maths', p: 'p2', title: 'Paper 2 (Extended)', code: '0607/22', session: 'Morning' },
-  { date: '2027-02-04', s: 'phys', p: 'p6', title: 'Practical / Alternative to Practical', code: '0625/62', session: 'Morning' },
-  { date: '2027-02-05', s: 'chem', p: 'p4', title: 'Theory (Extended)', code: '0620/42', session: 'Morning' },
-  { date: '2027-02-08', s: 'eng', p: 'p1', title: 'Paper 1', code: '0500/12', session: 'Morning' },
-  { date: '2027-02-08', s: 'ict', p: 'p1', title: 'Theory', code: '0417/12', session: 'Afternoon' },
-  { date: '2027-02-09', s: 'chem', p: 'p6', title: 'Practical / Alternative to Practical', code: '0620/62', session: 'Morning' },
-  { date: '2027-02-10', s: 'eng', p: 'p2', title: 'Paper 2', code: '0500/22', session: 'Morning' },
-  { date: '2027-02-12', s: 'phys', p: 'p4', title: 'Theory (Extended)', code: '0625/42', session: 'Morning' },
-  { date: '2027-02-15', s: 'maths', p: 'p4', title: 'Paper 4 (Extended)', code: '0607/42', session: 'Morning' },
-  { date: '2027-02-16', s: 'bio', p: 'p6', title: 'Practical / Alternative to Practical', code: '0610/62', session: 'Morning' },
-  { date: '2027-02-17', s: 'econ', p: 'p2', title: 'Theory', code: '0455/22', session: 'Morning' },
-  { date: '2027-02-18', s: 'bio', p: 'p4', title: 'Theory (Extended)', code: '0610/42', session: 'Morning' },
-  { date: '2027-02-23', s: 'maths', p: 'p6', title: 'Paper 6 (Extended)', code: '0607/62', session: 'Morning' },
-  { date: '2027-02-26', s: 'phys', p: 'p2', title: 'Multiple Choice (Extended)', code: '0625/22', session: 'Morning' },
-  { date: '2027-03-01', s: 'econ', p: 'p1', title: 'Multiple Choice', code: '0455/12', session: 'Morning' },
-  { date: '2027-03-03', s: 'chem', p: 'p2', title: 'Multiple Choice (Extended)', code: '0620/22', session: 'Morning' },
-  { date: '2027-03-04', s: 'bio', p: 'p2', title: 'Multiple Choice (Extended)', code: '0610/22', session: 'Morning' },
+  { date: '2027-01-27', s: 'ict', p: 'p2', title: 'Practical Test A', code: '0417/21', session: 'Morning', time: '10:00 am–12:15 pm', dur: '2h 15m' },
+  { date: '2027-02-02', s: 'ict', p: 'p3', title: 'Practical Test B', code: '0417/31', session: 'Morning', time: '10:00 am–12:15 pm', dur: '2h 15m' },
+  { date: '2027-02-03', s: 'maths', p: 'p2', title: 'Paper 2 Non-calculator (Extended)', code: '0607/22', session: 'Morning', time: '10:00–11:30 am', dur: '1h 30m' },
+  { date: '2027-02-04', s: 'phys', p: 'p6', title: 'Alternative to Practical', code: '0625/62', session: 'Morning', time: '10:00–11:00 am', dur: '1h' },
+  { date: '2027-02-05', s: 'chem', p: 'p4', title: 'Theory (Extended)', code: '0620/42', session: 'Morning', time: '10:00–11:15 am', dur: '1h 15m' },
+  { date: '2027-02-08', s: 'eng', p: 'p1', title: 'Reading', code: '0500/12', session: 'Morning', time: '10:00 am–12 noon', dur: '2h' },
+  { date: '2027-02-08', s: 'ict', p: 'p1', title: 'Theory', code: '0417/12', session: 'Afternoon', time: '1:15–2:45 pm', dur: '1h 30m' },
+  { date: '2027-02-09', s: 'chem', p: 'p6', title: 'Alternative to Practical', code: '0620/62', session: 'Morning', time: '10:00–11:00 am', dur: '1h' },
+  { date: '2027-02-10', s: 'eng', p: 'p2', title: 'Directed Writing and Composition', code: '0500/22', session: 'Morning', time: '10:00 am–12 noon', dur: '2h' },
+  { date: '2027-02-12', s: 'phys', p: 'p4', title: 'Theory (Extended)', code: '0625/42', session: 'Morning', time: '10:00–11:15 am', dur: '1h 15m' },
+  { date: '2027-02-15', s: 'maths', p: 'p4', title: 'Paper 4 Calculator (Extended)', code: '0607/42', session: 'Morning', time: '10:00–11:30 am', dur: '1h 30m' },
+  { date: '2027-02-16', s: 'bio', p: 'p6', title: 'Alternative to Practical', code: '0610/62', session: 'Morning', time: '10:00–11:00 am', dur: '1h' },
+  { date: '2027-02-17', s: 'econ', p: 'p2', title: 'Structured Questions', code: '0455/22', session: 'Morning', time: '10:00 am–12 noon', dur: '2h' },
+  { date: '2027-02-18', s: 'bio', p: 'p4', title: 'Theory (Extended)', code: '0610/42', session: 'Morning', time: '10:00–11:15 am', dur: '1h 15m' },
+  { date: '2027-02-23', s: 'maths', p: 'p6', title: 'Paper 6 Investigation and Modelling (Extended)', code: '0607/62', session: 'Morning', time: '10:00–11:30 am', dur: '1h 30m' },
+  { date: '2027-02-26', s: 'phys', p: 'p2', title: 'Multiple Choice (Extended)', code: '0625/22', session: 'Morning', time: '10:00–10:45 am', dur: '45m' },
+  { date: '2027-03-01', s: 'econ', p: 'p1', title: 'Multiple Choice', code: '0455/12', session: 'Morning', time: '10:00–11:00 am', dur: '1h' },
+  { date: '2027-03-03', s: 'chem', p: 'p2', title: 'Multiple Choice (Extended)', code: '0620/22', session: 'Morning', time: '10:00–10:45 am', dur: '45m' },
+  { date: '2027-03-04', s: 'bio', p: 'p2', title: 'Multiple Choice (Extended)', code: '0610/22', session: 'Morning', time: '10:00–10:45 am', dur: '45m' },
 ];
+/* Times are the school's (The Indian Public School, Karur, timetable v1): be there 30 minutes before. */
 
 /* Calendar range shown in the app (inclusive months). */
 const CAL_START = { y: 2026, m: 8 };  // September 2026 (0-based month)

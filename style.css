@@ -960,6 +960,7 @@ var { font-style: italic; }
 .fr > span { display: block; padding: 0 3px; white-space: nowrap; }
 .fr > span:first-child { border-bottom: 1.4px solid currentColor; }
 .qz-eq { font-size: 15px; line-height: 1.6; }
+.cv { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; line-height: 1.1; padding: 1px 5px; margin: 0 2px; border-left: 1.4px solid currentColor; border-right: 1.4px solid currentColor; border-radius: 7px; font-size: 0.88em; }
 
 .qz-slist { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
 .qz-s { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }

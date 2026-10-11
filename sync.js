@@ -11,10 +11,13 @@
    merge instead of overwriting each other. Deleting stores an empty record so
    the deletion travels too. */
 
+/* Several copies of the app can live on the same website (one per person). Each copy names its
+   browser storage with its own prefix, set in index.html (<meta name="cd-ns">), so they never mix. */
+const LS_NS = (document.querySelector('meta[name="cd-ns"]') || {}).content || '';
 const LS = {
-  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } },
-  del(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } },
+  get(k, d) { try { const v = localStorage.getItem(LS_NS + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(LS_NS + k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+  del(k) { try { localStorage.removeItem(LS_NS + k); } catch (e) { /* ignore */ } },
 };
 
 const Store = {

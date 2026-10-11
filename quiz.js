@@ -84,7 +84,7 @@ const QZ = (() => {
     chem: 'Cambridge IGCSE Chemistry 0620, 2026–2028 syllabus',
     phys: 'Cambridge IGCSE Physics 0625, 2026–2028 syllabus',
     bio: 'Cambridge IGCSE Biology 0610, 2026–2028 syllabus',
-    maths: 'Cambridge IGCSE Mathematics 0580 (Extended), 2025–2027 syllabus',
+    maths: 'Cambridge IGCSE International Mathematics 0607 (Extended), 2025–2027 syllabus',
     econ: 'Cambridge IGCSE Economics 0455, 2027–2029 syllabus',
   };
   const TOPICS = {};

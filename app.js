@@ -606,8 +606,8 @@ function heroHTML() {
     ? `<span class="hero-number">Today</span><span class="hero-unit">is your next paper</span>`
     : `<span class="hero-number">${d}</span><span class="hero-unit">${d === 1 ? 'day' : 'days'} to your next paper</span>`;
   return `<div class="hero-count">${count}</div>
-    <p class="hero-next"><b>${esc(SUBJ[nx.s].name)} ${esc(nx.title)}</b>, ${esc(nx.code)}, ${fmtDate(nx.date, 'long')}${nx.session === 'Morning' || nx.session === 'Afternoon' ? `, ${nx.session.toLowerCase()}` : ''}</p>
-    ${same.length ? `<p class="hero-also">Same day: ${same.map((x) => `${esc(SUBJ[x.s].name)} ${esc(x.title)} (${esc(x.session.toLowerCase())})`).join(', ')}</p>` : ''}
+    <p class="hero-next"><b>${esc(SUBJ[nx.s].name)} ${esc(nx.title)}</b>, ${esc(nx.code)}, ${fmtDate(nx.date, 'long')}${nx.time ? `, ${esc(nx.time)}` : ''}</p>
+    ${same.length ? `<p class="hero-also">Same day: ${same.map((x) => `${esc(SUBJ[x.s].name)} ${esc(x.title)} (${esc(x.time || x.session.toLowerCase())})`).join(', ')}</p>` : ''}
     ${stats}
     <button class="btn primary" data-act="log-today">Log today’s revision</button>`;
 }
@@ -908,7 +908,7 @@ function examsHTML() {
     const dd = dateObj(x.date);
     return `<li class="${i === 0 ? 'next' : ''}" style="--sc:${col(x.s, x.p).bg}">
       <span class="ex-date"><b>${dd.getDate()}</b>${dd.toLocaleDateString('en-GB', { month: 'short' })}</span>
-      <span class="ex-main"><b>${esc(SUBJ[x.s].name)}</b> ${esc(x.title)}<small>${esc(x.code)}, ${esc(x.session.toLowerCase())}</small></span>
+      <span class="ex-main"><b>${esc(SUBJ[x.s].name)}</b> ${esc(x.title)}<small>${esc(x.code)}, ${esc(x.time ? `${x.time}, ${x.dur}` : x.session.toLowerCase())}</small></span>
       <span class="ex-left">${d === 0 ? '<b>Today</b>' : `<b>${d}</b>${d === 1 ? 'day' : 'days'}`}</span></li>`;
   }).join('');
   return `<section class="block"><h2 class="h">Exam countdown</h2><ol class="exams">${rows}</ol>
@@ -1161,7 +1161,7 @@ function closeSheet() { ui.sheet = null; renderSheet(); }
 
 function daySheetHTML(S) {
   const exams = EXAMS_BY_DATE[S.date] || [];
-  const examHTML = exams.map((x) => `<p class="sheet-exam" style="--sc:${col(x.s, x.p).bg}">Exam: <b>${esc(SUBJ[x.s].name)}</b> ${esc(x.title)}, ${esc(x.code)}, ${esc(x.session.toLowerCase())}</p>`).join('');
+  const examHTML = exams.map((x) => `<p class="sheet-exam" style="--sc:${col(x.s, x.p).bg}">Exam: <b>${esc(SUBJ[x.s].name)}</b> ${esc(x.title)}, ${esc(x.code)}, ${esc(x.time ? `${x.time} (${x.dur})` : x.session.toLowerCase())}</p>`).join('');
   const rows = S.rows.map((r, i) => {
     const { s, p } = splitSp(r.sp);
     return `<div class="dayrow">
@@ -2108,7 +2108,7 @@ function go(tab, opts = {}) {
     if (history.state && history.state.cd === 'detail') { ignoreNextPop = true; history.back(); }
   }
   ui.tab = tab;
-  try { sessionStorage.setItem('cd.tab', tab); } catch (e) { /* ignore */ }
+  try { sessionStorage.setItem(LS_NS + 'cd.tab', tab); } catch (e) { /* ignore */ }
   render();
   if (!opts.keepScroll) window.scrollTo({ top: 0 });
 }
@@ -2665,7 +2665,7 @@ function init() {
     }
   });
   applyTheme();
-  try { const t = sessionStorage.getItem('cd.tab'); if (t) ui.tab = t; } catch (e) { /* ignore */ }
+  try { const t = sessionStorage.getItem(LS_NS + 'cd.tab'); if (t) ui.tab = t; } catch (e) { /* ignore */ }
   rebuild();
   render();
 

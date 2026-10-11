@@ -1,5 +1,5 @@
-/* Maths deck: only what the Cambridge IGCSE Mathematics 0580 (Extended, 2025–2027) syllabus expects you
-   to know without being given it. Areas and volumes of circles, cylinders, cones, spheres, pyramids and prisms,
+/* Maths deck: only what the Cambridge IGCSE International Mathematics 0607 (Extended, 2025–2027) syllabus
+   expects you to know without being given it. Areas and volumes of circles, cylinders, cones, spheres, pyramids and prisms,
    the quadratic formula, the sine and cosine rules and ½ab sin C are printed on page 2 of Papers 2 and 4,
    so they are left out on purpose. */
 
@@ -9,12 +9,15 @@
   const sq = (x) => `${x}<sup>2</sup>`;
   const sub = (x, n) => `${v(x)}<sub>${n}</sub>`;
   const x1 = sub('x', 1), x2 = sub('x', 2), y1 = sub('y', 1), y2 = sub('y', 2);
+  const cv = (a, b) => `<span class="cv"><span>${a}</span><span>${b}</span></span>`;
 
   addTopics('maths', {
     mform: 'Formulas you must know',
     mtrig: 'Exact trig values',
     mangle: 'Angles and polygons',
     mcircle: 'Circle theorems',
+    mfunc: 'Functions, graphs and logs',
+    mprob: 'Probability, proportion and sequences',
   });
 
   /* ── formulas not given in the exam ── */
@@ -35,14 +38,14 @@
     ['ymxc', 'y = mx + c', `In ${v('y')} = ${v('m')}${v('x')} + ${v('c')}, what are ${v('m')} and ${v('c')}?`, `${v('m')} is the gradient; ${v('c')} is the ${v('y')}-intercept`, [`${v('m')} is the ${v('y')}-intercept; ${v('c')} is the gradient`, `${v('m')} is the ${v('x')}-intercept; ${v('c')} is the ${v('y')}-intercept`, `${v('m')} is the gradient; ${v('c')} is the ${v('x')}-intercept`], 'Rearrange into y = mx + c first, e.g. 5x + 4y = 8 gives y = −1.25x + 2.'],
     ['parallel', 'Parallel lines', 'Two straight lines are parallel when…', 'they have the same gradient', ['their gradients multiply to −1', 'they have the same y-intercept', 'their gradients add to 0'], 'Parallel lines have equal gradients.'],
     ['perp', 'Perpendicular gradients', `A line has gradient ${v('m')}. A line perpendicular to it has gradient…`, `−${fr('1', v('m'))}`, [fr('1', v('m')), `−${v('m')}`, v('m')], `The two gradients multiply to −1: ${v('m')}<sub>1</sub> × ${v('m')}<sub>2</sub> = −1.`],
-    ['speed', 'Speed', 'Average speed =', fr('total distance', 'total time'), [fr('total time', 'total distance'), 'total distance × total time', fr('total distance', '2')], 'The syllabus says you need to know this one. Density and pressure formulas are given in the question if needed.'],
+    ['speed', 'Speed', 'Average speed =', fr('total distance', 'total time'), [fr('total time', 'total distance'), 'total distance × total time', fr('total distance', '2')], 'The syllabus says you need to know this one.'],
     ['simple', 'Simple interest', `Simple interest on ${v('P')} at ${v('r')}% a year for ${v('n')} years:`, fr(`${v('P')} × ${v('r')} × ${v('n')}`, '100'), [`${v('P')}(1 + ${fr(v('r'), '100')})<sup>${v('n')}</sup>`, `${v('P')} × ${v('r')} × ${v('n')}`, `${v('P')} + ${fr(v('r') + v('n'), '100')}`], 'Interest formulas are not given in the exam.'],
     ['compound', 'Compound interest', `Value of ${v('P')} after ${v('n')} years at ${v('r')}% compound interest:`, `${v('P')}(1 + ${fr(v('r'), '100')})<sup>${v('n')}</sup>`, [`${v('P')}(1 + ${fr(v('r') + v('n'), '100')})`, `${v('P')}(${fr(v('r'), '100')})<sup>${v('n')}</sup>`, `${v('P')}(1 + ${v('r')})<sup>${v('n')}</sup>`], 'Subtract P at the end if the question asks for the interest only.'],
     ['deprec', 'Depreciation', `Value of ${v('P')} after ${v('n')} years losing ${v('r')}% a year:`, `${v('P')}(1 − ${fr(v('r'), '100')})<sup>${v('n')}</sup>`, [`${v('P')}(1 + ${fr(v('r'), '100')})<sup>${v('n')}</sup>`, `${v('P')} − ${fr(v('r') + v('n'), '100')}`, `${v('P')}(${fr(v('r'), '100')})<sup>${v('n')}</sup>`], 'Same as compound interest, with a minus.'],
     ['pchange', 'Percentage change', 'Percentage increase or decrease =', `${fr('change', 'original')} × 100`, [`${fr('change', 'new value')} × 100`, `${fr('new value', 'original')} × 100`, `${fr('original', 'change')} × 100`], 'Always divide by the original amount.'],
     ['reverse', 'Reverse percentages', 'After a 20% increase a price is $96. The original price is…', '$96 ÷ 1.2', ['$96 × 0.8', '$96 ÷ 0.8', '$96 − 20% of $96'], 'Original = new ÷ (1 + r/100) after an increase, or new ÷ (1 − r/100) after a decrease.'],
-    ['notp', 'Probability of “not”', 'P(A does not happen) =', '1 − P(A)', ['P(A) − 1', '1 ÷ P(A)', '0.5 − P(A)'], 'Probabilities of all outcomes add up to 1.'],
-    ['fd', 'Frequency density', 'In a histogram, frequency density =', fr('frequency', 'class width'), [fr('class width', 'frequency'), 'frequency × class width', fr('frequency', 'total frequency')], 'Bar area = frequency.'],
+    ['notp', 'Probability of “not”', 'P(A′), the probability of not A, =', '1 − P(A)', ['P(A) − 1', '1 ÷ P(A)', '0.5 − P(A)'], 'Probabilities of all outcomes add up to 1.'],
+    ['vec', 'Magnitude of a vector', `The magnitude of the vector ${cv(v('x'), v('y'))} is…`, `√(${sq(v('x'))} + ${sq(v('y'))})`, [`${v('x')} + ${v('y')}`, `${sq(v('x'))} + ${sq(v('y'))}`, `√(${v('x')} + ${v('y')})`], 'Pythagoras on the two components. Written with modulus signs, e.g. |<b>a</b>|.'],
   ];
   for (const [id, , q, right, wrong, note] of F) {
     addCard(`mf-${id}`, 'mform', () => ({ prompt: q, ...mcq(right, wrong), explain: `<p class="qz-eq">${right}</p><p class="qz-note">${note}</p>` }));
@@ -112,6 +115,35 @@
     addCard(`ma-${id}`, 'mangle', () => ({ prompt: q, ...mcq(right, wrong), explain: `${q.replace(/…$/, '')} <b>${right}</b>.${angNote[id] ? ` ${angNote[id]}` : ''}` }));
   }
 
+  /* ── functions, graphs and logarithms (0607 Extended) ── */
+  const FN = [
+    ['log', 'Logarithms', `If ${v('y')} = ${v('a')}<sup>${v('x')}</sup>, then ${v('x')} =`, `log<sub>${v('a')}</sub> ${v('y')}`, [`log<sub>${v('y')}</sub> ${v('a')}`, `${v('y')} log ${v('a')}`, `<sup>${v('a')}</sup>√${v('y')}`], 'The logarithm is the inverse of the exponential function. Logs are base 10 unless stated.'],
+    ['logsolve', 'Solving with logs', `The solution of ${v('a')}<sup>${v('x')}</sup> = ${v('b')} is ${v('x')} =`, fr(`log ${v('b')}`, `log ${v('a')}`), [fr(`log ${v('a')}`, `log ${v('b')}`), `log(${v('b')} − ${v('a')})`, fr(v('b'), v('a'))], 'Take logs of both sides: x log a = log b.'],
+    ['transup', 'Translation up or down', `The graph of ${v('y')} = f(${v('x')}) + ${v('k')} is the graph of ${v('y')} = f(${v('x')})…`, `translated by ${cv('0', v('k'))}: ${v('k')} units up`, [`translated by ${cv(v('k'), '0')}: ${v('k')} units right`, `translated by ${cv('−' + v('k'), '0')}: ${v('k')} units left`, `stretched by a factor of ${v('k')}`], 'Adding outside the bracket moves the graph up (or down if k is negative).'],
+    ['transleft', 'Translation left or right', `The graph of ${v('y')} = f(${v('x')} + ${v('k')}) is the graph of ${v('y')} = f(${v('x')})…`, `translated by ${cv('−' + v('k'), '0')}: ${v('k')} units left`, [`translated by ${cv(v('k'), '0')}: ${v('k')} units right`, `translated by ${cv('0', v('k'))}: ${v('k')} units up`, `translated by ${cv('0', '−' + v('k'))}: ${v('k')} units down`], 'Inside the bracket works the opposite way: + k moves the graph left.'],
+    ['composite', 'Composite functions', 'gf(<var>x</var>) means…', 'g(f(<var>x</var>)): apply f first, then g', ['f(g(<var>x</var>)): apply g first, then f', 'g(<var>x</var>) × f(<var>x</var>)', 'g(<var>x</var>) + f(<var>x</var>)'], 'Work from the inside out: the function nearest x acts first.'],
+    ['inverse', 'Inverse functions', 'To find f<sup>−1</sup>(<var>x</var>) from <var>y</var> = f(<var>x</var>)…', 'make <var>x</var> the subject, then swap <var>x</var> and <var>y</var>', ['write 1 ÷ f(<var>x</var>)', 'replace <var>x</var> with −<var>x</var>', 'square f(<var>x</var>)'], 'f<sup>−1</sup> undoes f. It is not 1 ÷ f(x).'],
+    ['period', 'Period of sin and cos', `The period of ${v('y')} = sin ${v('x')} and of ${v('y')} = cos ${v('x')} is…`, '360°', ['180°', '90°', '720°'], 'They repeat every 360°. tan x repeats every 180°.'],
+    ['tanperiod', 'Period of tan', `The period of ${v('y')} = tan ${v('x')} is…`, '180°', ['360°', '90°', '45°'], 'tan x repeats every 180° and is undefined at 90° and 270°.'],
+    ['amp', 'Amplitude and period', `For ${v('y')} = ${v('a')} sin(${v('b')}${v('x')}), the amplitude and period are…`, `amplitude ${v('a')}, period ${fr('360°', v('b'))}`, [`amplitude ${v('b')}, period ${fr('360°', v('a'))}`, `amplitude ${v('a')}, period 360° × ${v('b')}`, `amplitude 2${v('a')}, period ${fr('180°', v('b'))}`], 'The same for a cos(bx).'],
+  ];
+  for (const [id, , q, right, wrong, note] of FN) {
+    addCard(`mg-${id}`, 'mfunc', () => ({ prompt: q, ...mcq(right, wrong), explain: `<p class="qz-eq">${right}</p><p class="qz-note">${note}</p>` }));
+  }
+
+  /* ── probability, proportion and sequences ── */
+  const PR = [
+    ['or', 'Mutually exclusive events', 'For mutually exclusive events, P(A or B) =', 'P(A) + P(B)', ['P(A) × P(B)', 'P(A) + P(B) − 1', '1 − P(A) × P(B)'], 'Mutually exclusive: they cannot both happen.'],
+    ['and', 'Independent events', 'For independent events, P(A and B) =', 'P(A) × P(B)', ['P(A) + P(B)', 'P(A) ÷ P(B)', '1 − P(A) − P(B)'], 'Independent: one happening doesn’t change the chance of the other.'],
+    ['direct', 'Direct proportion', `${v('y')} is directly proportional to the square of ${v('x')}. So…`, `${v('y')} = ${v('k')}${sq(v('x'))}`, [`${v('y')} = ${sq(v('x'))} + ${v('k')}`, `${v('y')} = ${fr(v('k'), sq(v('x')))}`, `${v('y')} = ${v('k')}${v('x')}`], 'y ∝ x² means y = kx². Find k from one pair of values first.'],
+    ['inverse', 'Inverse proportion', `${v('y')} is inversely proportional to ${v('x')}. So…`, `${v('y')} = ${fr(v('k'), v('x'))}`, [`${v('y')} = ${v('k')}${v('x')}`, `${v('y')} = ${v('x')} − ${v('k')}`, `${v('y')} = ${fr(v('k'), sq(v('x')))}`], 'y ∝ 1/x means y = k/x.'],
+    ['linear', 'Linear sequences', 'The <var>n</var>th term of 5, 8, 11, 14, … is', '3<var>n</var> + 2', ['5<var>n</var> + 3', '3<var>n</var> + 5', '<var>n</var> + 3'], 'The common difference (3) is the number in front of n; then adjust so the first term is right: 3 × 1 + 2 = 5.'],
+    ['quadratic', 'Quadratic sequences', 'A sequence has a constant second difference of 4. Its <var>n</var>th term starts with…', '2<var>n</var><sup>2</sup>', ['4<var>n</var><sup>2</sup>', '<var>n</var><sup>2</sup>', '8<var>n</var><sup>2</sup>'], 'The n² coefficient is half the second difference.'],
+  ];
+  for (const [id, , q, right, wrong, note] of PR) {
+    addCard(`mp-${id}`, 'mprob', () => ({ prompt: q, ...mcq(right, wrong), explain: `<p class="qz-eq">${right}</p><p class="qz-note">${note}</p>` }));
+  }
+
   /* ── circle theorems, with diagrams ── */
   const C = (cx, cy, r) => `<circle cx="${cx}" cy="${cy}" r="${r}" class="cl"/>`;
   const L = (a, b, cls = 'ln') => `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" class="${cls}"/>`;
@@ -175,7 +207,7 @@
     speed: 'speed = ', simple: 'interest = ', compound: 'value = ', deprec: 'value = ', pchange: 'percentage change = ', fd: 'frequency density = ', notp: 'P(not A) = ',
   };
   QZ.SHEETS.maths = () => `<div class="qz-sheet">
-    <nav class="qz-jump" aria-label="Jump to"><button data-act="qz-jump" data-to="qzm-f">Formulas</button><button data-act="qz-jump" data-to="qzm-t">Trig values</button><button data-act="qz-jump" data-to="qzm-a">Angles</button><button data-act="qz-jump" data-to="qzm-c">Circle theorems</button></nav>
+    <nav class="qz-jump" aria-label="Jump to"><button data-act="qz-jump" data-to="qzm-f">Formulas</button><button data-act="qz-jump" data-to="qzm-t">Trig values</button><button data-act="qz-jump" data-to="qzm-a">Angles</button><button data-act="qz-jump" data-to="qzm-g">Functions</button><button data-act="qz-jump" data-to="qzm-p">Probability</button><button data-act="qz-jump" data-to="qzm-c">Circle theorems</button></nav>
     <p class="qz-callout"><b>Printed on page 2 of Papers 2 and 4, so not here:</b> area of a triangle and circle, circumference, curved surface areas of a cylinder and cone, surface area of a sphere, volumes of a prism, pyramid, cylinder, cone and sphere, the quadratic formula, the sine rule, the cosine rule and ½<var>ab</var> sin <var>C</var>.</p>
     <h4 id="qzm-f">Formulas you must know</h4>
     <dl class="qz-defs">${F.map(([id, name, , right]) => `<div><dt>${name}</dt><dd class="qz-eq">${PRE[id] || ''}${right}</dd></div>`).join('')}
@@ -186,6 +218,10 @@
     </tbody></table>
     <h4 id="qzm-a">Angles and polygons</h4>
     <dl class="qz-defs">${ANG.slice(0, 12).map(([, q, right]) => `<div><dt>${q.replace(/…$/, '').replace(/^./, (c) => c.toUpperCase())}</dt><dd>${right}</dd></div>`).join('')}</dl>
+    <h4 id="qzm-g">Functions, graphs and logs</h4>
+    <dl class="qz-defs">${FN.map(([, name, q, right]) => `<div><dt>${name}</dt><dd class="qz-eq">${q.replace(/…$/, '').replace(/ =$/, ' =')} ${right}</dd></div>`).join('')}</dl>
+    <h4 id="qzm-p">Probability, proportion and sequences</h4>
+    <dl class="qz-defs">${PR.map(([, name, q, right]) => `<div><dt>${name}</dt><dd class="qz-eq">${q.replace(/…$/, '').replace(/ So$/, '')} ${right}</dd></div>`).join('')}</dl>
     <h4 id="qzm-c">Circle theorems</h4>
     <ul class="qz-circs">${CT.map(([, name, q, right, , pic]) => `<li>${pic}<div><b>${name}</b><span>${q.replace(/…\.?$/, '').replace(' … ', ` ${right} `)}${q.includes(' … ') ? '' : ` ${right}`}</span></div></li>`).join('')}</ul>
   </div>`;
