@@ -461,8 +461,8 @@ const QZ = (() => {
     for (const d of list) DEFS.push({ s, topic, d });
     const pool = KEYPOOL[s] || (KEYPOOL[s] = []);
     for (const d of list) for (const p of parseDef(d.text)) if (p.k && !pool.includes(p.k)) pool.push(p.k);
-    for (const d of list) addCard(d.id, topic, () => clozeQ(s, d));
-    for (const d of list) if (d.g) addCard(`${d.id}-n`, topic, () => nameQ(d, list));
+    for (const d of list) addCard(d.id, topic, () => clozeQ(s, d)).def = true;
+    for (const d of list) if (d.g) addCard(`${d.id}-n`, topic, () => nameQ(d, list)).def = true;
   }
   const fr = (a, b) => `<span class="fr"><span>${a}</span><span>${b}</span></span>`;
   const SHEETS = {};
@@ -498,14 +498,18 @@ const QZ_MAX_DUE = 40;
 const QZ_NEW_CHOICES = [10, 15, 20, 25, 30];
 const QZ_NEW_DEFAULT = 20;
 
-/* Settings sync as one record, qs/cfg: { off: [subjects switched off], n: new questions a day }. */
+/* Settings sync as one record, qs/cfg:
+   { off: [subjects switched off], n: new questions a day, defs: definition questions on (default off) }. */
 function qzCfg() {
   const c = state.qset || {};
   const off = Array.isArray(c.off) ? c.off : [];
-  return { off, n: QZ_NEW_CHOICES.includes(c.n) ? c.n : QZ_NEW_DEFAULT };
+  return { off, n: QZ_NEW_CHOICES.includes(c.n) ? c.n : QZ_NEW_DEFAULT, defs: c.defs === true };
 }
 const qzSubjHas = (s) => QZ.CARDS.some((c) => c.s === s);
-function qzOnSubjects() { const { off } = qzCfg(); return QZ.SUBJ_ORDER.filter((s) => qzSubjHas(s) && !off.includes(s)); }
+/* A card is in play when its subject is on, and, for definition cards, when definition questions are on. */
+const qzCardIn = (c, cfg = qzCfg()) => cfg.defs || !c.def;
+const qzSubjCards = (s, cfg = qzCfg()) => QZ.CARDS.filter((c) => c.s === s && qzCardIn(c, cfg));
+function qzOnSubjects() { const cfg = qzCfg(); return QZ.SUBJ_ORDER.filter((s) => qzSubjCards(s, cfg).length && !cfg.off.includes(s)); }
 const qzIsOn = (s) => qzOnSubjects().includes(s);
 
 function qzRec(id) { return state.quiz[id]; }
@@ -518,14 +522,16 @@ function qzIntroducedToday() {
 function qzDueToday(subjects) {
   const t = todayISO();
   const on = new Set(subjects || qzOnSubjects());
-  return QZ.CARDS.filter((c) => { const r = qzRec(c.id); return on.has(c.s) && r && r.d <= t; })
+  const cfg = qzCfg();
+  return QZ.CARDS.filter((c) => { const r = qzRec(c.id); return on.has(c.s) && qzCardIn(c, cfg) && r && r.d <= t; })
     .sort((a, b) => (qzRec(a.id).d.localeCompare(qzRec(b.id).d)) || (qzRec(a.id).b - qzRec(b.id).b))
     .slice(0, QZ_MAX_DUE).map((c) => c.id);
 }
 
 function qzNewToday(limit, subjects) {
   const n = limit != null ? limit : Math.max(0, qzCfg().n - qzIntroducedToday());
-  return QZ.newOrder(subjects || qzOnSubjects()).filter((id) => !qzRec(id)).slice(0, n);
+  const cfg = qzCfg();
+  return QZ.newOrder(subjects || qzOnSubjects()).filter((id) => !qzRec(id) && qzCardIn(QZ.BY_ID[id], cfg)).slice(0, n);
 }
 
 function qzTodayQueue() {
@@ -555,8 +561,8 @@ function qzMasteryOf(cards) {
   const seen = cards.filter((c) => qzRec(c.id)).length;
   return { total: cards.length, secure, seen };
 }
-const qzMastery = (topic) => qzMasteryOf(QZ.CARDS.filter((c) => c.topic === topic));
-const qzSubjMastery = (s) => qzMasteryOf(QZ.CARDS.filter((c) => c.s === s));
+const qzMastery = (topic) => qzMasteryOf(QZ.CARDS.filter((c) => c.topic === topic && qzCardIn(c)));
+const qzSubjMastery = (s) => qzMasteryOf(qzSubjCards(s));
 
 /* ───────────── rendering ───────────── */
 
@@ -573,7 +579,7 @@ function renderQuiz() {
   const streak = qzStreak();
   const cfg = qzCfg();
   const on = qzOnSubjects();
-  const unseen = QZ.CARDS.filter((c) => on.includes(c.s) && !qzRec(c.id)).length;
+  const unseen = QZ.CARDS.filter((c) => on.includes(c.s) && qzCardIn(c, cfg) && !qzRec(c.id)).length;
   const last14 = [...Array(14)].map((_, i) => addDays(todayISO(), i - 13));
   const subjects = QZ.SUBJ_ORDER.filter(qzSubjHas);
   const open = ui.qzOpen;
@@ -594,9 +600,16 @@ function renderQuiz() {
       <p class="fine">Switch a subject off to leave it out of the daily quiz. “Secure” means answered right at least three times in a row, with days in between.</p>
       <ul class="qz-slist">${subjects.map((s) => {
         const m = qzSubjMastery(s);
-        const isOn = !cfg.off.includes(s);
+        const onlyDefs = !m.total; // e.g. Economics, which is all definitions
+        const isOn = !cfg.off.includes(s) && !onlyDefs;
         const c = col(s);
-        const topics = Object.keys(QZ.TOPICS).filter((t) => QZ.TOPICS[t].s === s);
+        const topics = Object.keys(QZ.TOPICS).filter((t) => QZ.TOPICS[t].s === s && QZ.CARDS.some((x) => x.topic === t && qzCardIn(x, cfg)));
+        if (onlyDefs) {
+          return `<li class="qz-s off"><div class="qz-srow">
+            <button class="qz-sw" role="switch" aria-checked="false" disabled aria-label="${esc(qzSubjName(s))} has only definition questions"><span aria-hidden="true"></span></button>
+            <span class="qz-sname"><b>${esc(qzSubjName(s))}</b><small>Definitions only: on when definition questions are on</small></span>
+            <button class="btn small" data-act="qz-sheet" data-s="${s}">Cheat sheet</button></div></li>`;
+        }
         return `<li class="qz-s${isOn ? '' : ' off'}${open === s ? ' open' : ''}">
           <div class="qz-srow">
             <button class="qz-sw" role="switch" aria-checked="${isOn}" data-act="qz-toggle" data-s="${s}" aria-label="Include ${esc(qzSubjName(s))} in the daily quiz"><span aria-hidden="true"></span></button>
@@ -607,6 +620,10 @@ function renderQuiz() {
             <div class="btn-row qz-sacts"><button class="btn small" data-act="qz-prac" data-s="${s}">Practise 10 ${esc(qzSubjName(s))}</button><button class="btn small" data-act="qz-sheet" data-s="${s}">${esc(qzSubjName(s))} cheat sheet</button></div>` : ''}
         </li>`;
       }).join('')}</ul>
+      <div class="qz-defrow">
+        <button class="qz-sw" role="switch" aria-checked="${cfg.defs}" data-act="qz-defs" aria-labelledby="qzDefLbl"><span aria-hidden="true"></span></button>
+        <div><b id="qzDefLbl">Definition questions</b><small>${cfg.defs ? 'On: fill-in-the-key-words questions for Chemistry, Physics, Biology and Economics definitions.' : 'Off: learn definitions from your definitions document or the cheat sheets instead.'}</small></div>
+      </div>
       <div class="qz-newrow"><span id="qzNewLbl">New questions a day</span>
         <div class="qz-seg" role="radiogroup" aria-labelledby="qzNewLbl">${QZ_NEW_CHOICES.map((n) => `<button role="radio" aria-checked="${cfg.n === n}" class="${cfg.n === n ? 'on' : ''}" data-act="qz-newn" data-n="${n}">${n}</button>`).join('')}</div>
       </div>
@@ -801,16 +818,17 @@ function qzAnswer(correct) {
 
 /* Ten questions to practise: unseen ones first (in the usual order), then the weakest ones you've seen. */
 function qzPracticeSet(subjects, n = 10) {
-  const fresh = QZ.newOrder(subjects).filter((id) => !qzRec(id)).slice(0, n);
+  const cfg = qzCfg();
+  const fresh = QZ.newOrder(subjects).filter((id) => !qzRec(id) && qzCardIn(QZ.BY_ID[id], cfg)).slice(0, n);
   if (fresh.length >= n) return QZ.shuffle(fresh);
-  const seen = QZ.shuffle(QZ.CARDS.filter((c) => subjects.includes(c.s) && qzRec(c.id)).map((c) => c.id))
+  const seen = QZ.shuffle(QZ.CARDS.filter((c) => subjects.includes(c.s) && qzCardIn(c, cfg) && qzRec(c.id)).map((c) => c.id))
     .sort((a, b) => (qzRec(a).b || 0) - (qzRec(b).b || 0)).slice(0, n - fresh.length);
   return QZ.shuffle(fresh.concat(seen));
 }
 
 function qzSetCfg(patch) {
   const c = { ...qzCfg(), ...patch };
-  setRec('qs/cfg', { off: c.off, n: c.n });
+  setRec('qs/cfg', { off: c.off, n: c.n, defs: c.defs });
   commit();
 }
 
@@ -829,6 +847,12 @@ function quizClick(el, act, d) {
     }
     case 'qz-sopen': ui.qzOpen = ui.qzOpen === d.s ? null : d.s; renderQuiz(); break;
     case 'qz-newn': qzSetCfg({ n: Number(d.n) }); break;
+    case 'qz-defs': {
+      const on = !qzCfg().defs;
+      qzSetCfg({ defs: on });
+      toast(on ? 'Definition questions are back in the daily quiz.' : 'Definition questions are off. Your progress on them is kept.');
+      break;
+    }
     case 'qz-pick':
       if (!Q || Q.answered) return;
       Q.picked = Number(d.i);

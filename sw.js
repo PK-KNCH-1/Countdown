@@ -1,12 +1,12 @@
 /* Countdown service worker: keeps the app usable offline.
    App files: network first, falling back to the saved copy.
    Fonts: saved copy first. Sync calls are never cached. */
-const VERSION = 'countdown-v8';
+const VERSION = 'countdown-v9';
 // Caches are shared by everything on the same website, so name them after this copy's folder
 // and only ever clear this copy's old ones (and the unscoped names used before v8).
 const SCOPE = new URL(self.registration.scope).pathname;
 const CACHE = `${SCOPE}|${VERSION}`;
-const SHELL = ['./', 'index.html', 'style.css?v=8', 'data.js?v=8', 'sync.js?v=8', 'quiz.js?v=8', 'qz-chem.js?v=8', 'qz-phys.js?v=8', 'qz-bio.js?v=8', 'qz-maths.js?v=8', 'qz-econ.js?v=8', 'app.js?v=8', 'config.js?v=8', 'manifest.webmanifest', 'icons/icon-192.png'];
+const SHELL = ['./', 'index.html', 'style.css?v=9', 'data.js?v=9', 'sync.js?v=9', 'quiz.js?v=9', 'qz-chem.js?v=9', 'qz-phys.js?v=9', 'qz-bio.js?v=9', 'qz-maths.js?v=9', 'qz-econ.js?v=9', 'app.js?v=9', 'config.js?v=9', 'manifest.webmanifest', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

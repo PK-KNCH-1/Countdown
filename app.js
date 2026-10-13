@@ -1989,7 +1989,7 @@ function readImport(obj) {
   }
   for (const [id, r] of Object.entries(obj.quiz || {})) if (QZ.BY_ID[id] && r && typeof r === 'object') recs[`q/${id}`] = r;
   for (const [d, r] of Object.entries(obj.quizDays || {})) if (/^\d{4}-\d{2}-\d{2}$/.test(d) && r && typeof r === 'object') recs[`qd/${d}`] = r;
-  if (obj.quizSettings && typeof obj.quizSettings === 'object') recs['qs/cfg'] = { off: Array.isArray(obj.quizSettings.off) ? obj.quizSettings.off.filter((x) => typeof x === 'string') : [], n: Number(obj.quizSettings.n) || QZ_NEW_DEFAULT };
+  if (obj.quizSettings && typeof obj.quizSettings === 'object') recs['qs/cfg'] = { off: Array.isArray(obj.quizSettings.off) ? obj.quizSettings.off.filter((x) => typeof x === 'string') : [], n: Number(obj.quizSettings.n) || QZ_NEW_DEFAULT, defs: obj.quizSettings.defs === true };
   const goals = Array.isArray(obj.goals) ? obj.goals : Object.values(obj.goals || {});
   for (const g of goals) {
     if (!g || !g.id) continue;
