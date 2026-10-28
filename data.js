@@ -73,6 +73,21 @@ const PP_AVAILABILITY = (() => {
   };
 })();
 
+/* ICT practicals are made of sections that can be practised on their own (syllabus 0417 sections
+   17–21; older papers call databases "data manipulation" and spreadsheets "data analysis").
+   Each section is ticked off separately and counts as its share of the paper. */
+const PAPER_PARTS = {
+  ict_p2: [
+    { id: 'doc', name: 'Document production', short: 'Documents' },
+    { id: 'db', name: 'Databases', short: 'Database' },
+    { id: 'pres', name: 'Presentations', short: 'Presentation' },
+  ],
+  ict_p3: [
+    { id: 'ss', name: 'Spreadsheets', short: 'Spreadsheet' },
+    { id: 'web', name: 'Website authoring', short: 'Website' },
+  ],
+};
+
 /* The official final timetable, Zone 4 (India), Feb/March 2027. */
 const EXAMS = [
   { date: '2027-01-27', s: 'ict', p: 'p2', title: 'Practical Test A', code: '0417/21', session: 'Morning', time: '10:00 am–12:15 pm', dur: '2h 15m' },

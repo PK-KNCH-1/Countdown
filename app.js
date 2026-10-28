@@ -67,6 +67,23 @@ function parseKey(k) {
   const [s, p, y, ser, v] = k.split('_');
   return { s, p, y: Number(y), ser, v: Number(v), sp: `${s}_${p}` };
 }
+/* Sections of a paper (ICT practicals), and how much of a recorded paper is done (0 to 1).
+   A record with done: true has every section; a partly done one lists its sections in parts. */
+const partsOf = (sp) => PAPER_PARTS[sp] || null;
+function partsDone(key, r = state.lib[key]) {
+  const P = partsOf(parseKey(key).sp);
+  if (!P || !r) return [];
+  return P.map((x) => x.id).filter((id) => r.done || (r.parts || []).includes(id));
+}
+function creditOf(key, r = state.lib[key]) {
+  if (!r) return 0;
+  if (r.done) return 1;
+  const P = partsOf(parseKey(key).sp);
+  return P ? partsDone(key, r).length / P.length : 0;
+}
+// Paper counts can be fractional once sections count: 83.5, 12.3.
+const fc = (n) => fmtNum(n, 1);
+
 function compCode(sId, pId, v) {
   const s = SUBJ[sId], p = paperOf(sId, pId);
   return s.syl ? `${s.syl}/${p.n}${v}` : `Paper ${p.n} v${v}`;
@@ -157,9 +174,10 @@ function derive() {
   const doneBySp = {}, keysBySp = {};
   let recentKey = null, recentT = 0;
   for (const [k, r] of Object.entries(state.lib)) {
-    if (!r || !r.done) continue;
+    const c = creditOf(k, r);
+    if (!c) continue;
     const { sp } = parseKey(k);
-    doneBySp[sp] = (doneBySp[sp] || 0) + 1;
+    doneBySp[sp] = (doneBySp[sp] || 0) + c;
     (keysBySp[sp] = keysBySp[sp] || []).push(k);
     if (r.markedAt && r.markedAt > recentT) { recentT = r.markedAt; recentKey = k; }
   }
@@ -196,36 +214,71 @@ function adjustDone(date, sp, delta) {
   if ((state.entries[date] || {}).__rest) setRec(`e/${date}/__rest`, null);
 }
 
-function savePaper(key, { obt, tot, date }) {
+function savePaper(key, { obt, tot, date, parts, touch }) {
   const prev = state.lib[key];
   const { sp } = parseKey(key);
+  const P = partsOf(sp);
+  const got = P ? P.map((x) => x.id).filter((id) => !parts || parts.includes(id)) : null;
+  const complete = !P || got.length === P.length;
   if (obt == null) tot = null;
   let score = null;
   if (obt != null && tot != null && tot > 0) score = Math.round((obt / tot) * 100);
   else if (obt == null && tot == null && prev && prev.score != null && prev.marksObtained == null) score = prev.score;
   const rec = {
-    done: true,
+    done: complete,
     marksObtained: obt,
     marksTotal: tot,
     score,
     date: date || null,
     markedAt: (prev && prev.markedAt) || Date.now(),
   };
-  if (!prev) rec.markedAt = Date.now();
+  if (!prev || touch) rec.markedAt = Date.now();
+  if (!complete) rec.parts = got;
   setRec(`p/${key}`, rec);
-  const oldDate = prev ? prev.date : null;
-  if (oldDate !== rec.date) {
-    if (oldDate) adjustDone(oldDate, sp, -1);
-    if (rec.date) adjustDone(rec.date, sp, +1);
+  // The calendar counts whole papers, on the day they were finished.
+  const was = prev && prev.done ? prev.date : null;
+  const now = rec.done ? rec.date : null;
+  if (was !== now) {
+    if (was) adjustDone(was, sp, -1);
+    if (now) adjustDone(now, sp, +1);
   }
   return !prev;
+}
+
+/* Tick or untick one section of a paper straight from the Paper Library. */
+function togglePart(key, id) {
+  const prev = state.lib[key];
+  const P = partsOf(parseKey(key).sp);
+  const cur = new Set(partsDone(key));
+  if (cur.has(id)) cur.delete(id); else cur.add(id);
+  const got = P.map((x) => x.id).filter((x) => cur.has(x));
+  if (!got.length && !(prev && prev.marksObtained != null)) { removePaper(key); return got; }
+  const finishing = got.length === P.length && !(prev && prev.done);
+  // A paper finished today counts on today, unless it was set not to count toward a day.
+  const date = !prev ? todayISO() : prev.date ? (finishing ? todayISO() : prev.date) : null;
+  savePaper(key, { obt: prev ? prev.marksObtained : null, tot: prev ? prev.marksTotal : null, date, parts: got, touch: true });
+  return got;
+}
+
+/* Sections done within the target, per section of a paper, e.g. Spreadsheet 12 of 28. */
+function partStats(sp) {
+  const P = partsOf(sp);
+  const { s } = splitSp(sp);
+  const sel = targetSel(s);
+  const n = Object.fromEntries(P.map((x) => [x.id, 0]));
+  for (const k of derived.keysBySp[sp] || []) {
+    const q = parseKey(k);
+    if (sel && !(sel.years.includes(q.y) && sel.series.includes(q.ser))) continue;
+    for (const id of partsDone(k)) n[id]++;
+  }
+  return P.map((x) => ({ ...x, done: n[x.id], total: targetOf(sp) }));
 }
 
 function removePaper(key) {
   const prev = state.lib[key];
   if (!prev) return;
   setRec(`p/${key}`, null);
-  if (prev.date) adjustDone(prev.date, parseKey(key).sp, -1);
+  if (prev.done && prev.date) adjustDone(prev.date, parseKey(key).sp, -1);
 }
 
 /* ───────────── calculations ───────────── */
@@ -255,7 +308,7 @@ function doneOf(sp) {
   let n = 0;
   for (const k of derived.keysBySp[sp] || []) {
     const p = parseKey(k);
-    if (sel.years.includes(p.y) && sel.series.includes(p.ser)) n++;
+    if (sel.years.includes(p.y) && sel.series.includes(p.ser)) n += creditOf(k);
   }
   return n;
 }
@@ -508,7 +561,7 @@ function progressTile() {
   const rows = SUBJECTS.map((s) => {
     const st = subjStats(s.id);
     const pct = st.target ? (st.done / st.target) * 100 : 0;
-    return `<button class="wt-subj" data-act="dash-subj" data-s="${s.id}" aria-label="${esc(s.name)}: ${st.done} of ${st.target} done. Open its papers.">
+    return `<button class="wt-subj" data-act="dash-subj" data-s="${s.id}" aria-label="${esc(s.name)}: ${fc(st.done)} of ${st.target} done. Open its papers.">
       <span class="wt-code">${s.code}</span>
       <span class="wt-bar"><i style="width:${clamp(pct, 0, 100)}%;background:${col(s.id).bg}"></i></span>
       <span class="wt-pct">${pct > 0 && pct < 10 ? pct.toFixed(1) : Math.round(pct)}%</span></button>`;
@@ -518,8 +571,8 @@ function progressTile() {
     <div class="wt-prog">
       <div class="ring-wrap ring-sm">${ringSVG(t.target ? t.done / t.target : 0, 76, 8, `${t.pct.toFixed(2)} percent of targets done`)}<div class="ring-txt"><b>${t.pct.toFixed(1)}%</b></div></div>
       <dl class="wt-kv">
-        <div><dt>Done</dt><dd>${t.done}<small>/${t.target}</small></dd></div>
-        <div><dt>Left</dt><dd>${t.left}</dd></div>
+        <div><dt>Done</dt><dd>${fc(t.done)}<small>/${t.target}</small></dd></div>
+        <div><dt>Left</dt><dd>${fc(t.left)}</dd></div>
         <div><dt>Average</dt><dd>${avg != null ? `${avg}%` : '–'}</dd></div>
       </dl>
     </div>
@@ -594,7 +647,7 @@ function overviewTile() {
         if (sel && (!sel.years.includes(y) || !sel.series.includes(x.id))) continue;
         for (const p of s.papers) for (const v of variants(s.id, x.id, p.id)) {
           tot++;
-          if (state.lib[pkey(s.id, p.id, y, x.id, v)]) dn++;
+          dn += creditOf(pkey(s.id, p.id, y, x.id, v));
         }
       }
       inT += tot; doneT += dn;
@@ -606,7 +659,7 @@ function overviewTile() {
   }).join('');
   return `<section class="wt" data-act="stats-open" data-v="overview" aria-label="Completion overview. Open it.">${tileHead('Completion', 'data-act="stats-open" data-v="overview"')}
     <div class="wt-heat" style="grid-template-columns:18px repeat(${years.length}, minmax(0, 1fr))" aria-hidden="true">${rows}</div>
-    <p class="wt-foot">${years.length ? `${years[0]}–${years[years.length - 1]}, ${doneT} of ${inT}` : ''}</p>
+    <p class="wt-foot">${years.length ? `${years[0]}–${years[years.length - 1]}, ${fc(doneT)} of ${inT}` : ''}</p>
   </section>`;
 }
 
@@ -666,7 +719,7 @@ function heroHTML() {
   const t = totals();
   const stats = `<div class="hero-stats">
       <div><b>${t.pct.toFixed(2)}%</b><span>overall</span></div>
-      <div><b>${t.left}</b><span>papers left</span></div>
+      <div><b>${fc(t.left)}</b><span>papers left</span></div>
       <div><b>${list.length ? Math.max(0, daysUntil(list[0].date)) : 0}</b><span>days left</span></div>
       <div><b>${t.left && list.length ? fmtNum(t.perDay, 1) : 0}</b><span>a day needed</span></div>
     </div>`;
@@ -717,7 +770,7 @@ function overallHTML() {
     <h2 class="h">Overall</h2>
     <div class="overall-in">
       <div class="ring-wrap">${ringSVG(t.target ? t.done / t.target : 0, 108, 10, `${t.pct.toFixed(2)} percent of all targets done`)}
-        <div class="ring-txt"><b>${t.pct.toFixed(2)}%</b><span>${t.done} of ${t.target}</span></div>
+        <div class="ring-txt"><b>${t.pct.toFixed(2)}%</b><span>${fc(t.done)} of ${t.target}</span></div>
       </div>
       <dl class="pace">
         <div><dt>Done this week</dt><dd>${week}</dd></div>
@@ -736,11 +789,11 @@ function subjectsHTML() {
     const pct = st.target ? (st.done / st.target) * 100 : 0;
     const open = ui.lib && ui.lib.s === s.id;
     const c = col(s.id);
-    const per = st.per.map(({ p, t, d }) => `<span>P${p.n} <b>${d}</b>/${t}</span>`).join('');
+    const per = st.per.map(({ p, t, d }) => `<span>P${p.n} <b>${fc(d)}</b>/${t}</span>`).join('');
     return `<div class="srow-wrap${open ? ' open' : ''}" id="subj-${s.id}">
       <button class="srow" data-act="lib-open" data-s="${s.id}" aria-expanded="${open}">
         <span class="sr-name">${swatch(s.id)}<b>${esc(s.name)}</b></span>
-        <span class="sr-num"><b>${st.done}</b>/${st.target}</span>
+        <span class="sr-num"><b>${fc(st.done)}</b>/${st.target}</span>
         <span class="sr-pct">${pct.toFixed(1)}%</span>
         <span class="sr-bar" aria-hidden="true"><span style="width:${clamp(pct, 0, 100)}%;background:${c.bg}"></span></span>
         <span class="sr-per">${per}${st.avg != null ? `<span class="sr-avg">avg ${Math.round(st.avg)}%</span>` : ''}</span>
@@ -768,7 +821,7 @@ function yearsHTML(sId, sel, act, countFn, tsel) {
   return `<div class="years" role="group" aria-label="Year">${yearsFor(sId).map((y) => {
     const n = countFn(y);
     const off = tsel && !tsel.years.includes(y);
-    return `<button type="button" class="yr${y === sel ? ' on' : ''}${off ? ' off' : ''}" data-act="${act}" data-y="${y}" aria-pressed="${y === sel}"${off ? ' title="Not in your target"' : ''}>${y}${n ? `<small>${n}</small>` : ''}</button>`;
+    return `<button type="button" class="yr${y === sel ? ' on' : ''}${off ? ' off' : ''}" data-act="${act}" data-y="${y}" aria-pressed="${y === sel}"${off ? ' title="Not in your target"' : ''}>${y}${n && n !== '0' ? `<small>${n}</small>` : ''}</button>`;
   }).join('')}</div>`;
 }
 
@@ -786,10 +839,14 @@ function tileHTML(key, opts = {}) {
   const done = r && r.done;
   const c = col(k.s, k.p);
   const recent = key === derived.recentKey;
-  const style = done ? `background:${c.bg};color:${c.fg};border-color:${c.bg}` : `border-color:${c.bg}`;
-  const sub = opts.sub || (done ? (r.score != null ? `${r.score}%` : 'Done') : '');
-  const cls = ['tile', done ? 'done' : '', recent ? 'recent' : '', opts.sel ? 'sel' : '', ui.form && ui.form.key === key && ui.form.ctx === opts.ctx ? 'editing' : ''].filter(Boolean).join(' ');
-  const label = `${compCode(k.s, k.p, k.v)} ${SERIES_BY_ID[k.ser].long} ${k.y}${done ? ', done' + (r.score != null ? `, ${r.score} percent` : '') : ''}${opts.sel ? ', selected' : ''}${recent ? ', most recent' : ''}`;
+  const P = partsOf(k.sp), got = P ? partsDone(key).length : 0;
+  const part = !done && got > 0;
+  const fill = part ? Math.round((got / P.length) * 100) : 0;
+  const style = done ? `background:${c.bg};color:${c.fg};border-color:${c.bg}`
+    : part ? `border-color:${c.bg};background:linear-gradient(to top, color-mix(in srgb, ${c.bg} 40%, var(--surface)) ${fill}%, var(--surface) ${fill}%)` : `border-color:${c.bg}`;
+  const sub = opts.sub || (done ? (r.score != null ? `${r.score}%` : 'Done') : part ? `${got}/${P.length}` : '');
+  const cls = ['tile', done ? 'done' : '', part ? 'part' : '', recent ? 'recent' : '', opts.sel ? 'sel' : '', ui.form && ui.form.key === key && ui.form.ctx === opts.ctx ? 'editing' : ''].filter(Boolean).join(' ');
+  const label = `${compCode(k.s, k.p, k.v)} ${SERIES_BY_ID[k.ser].long} ${k.y}${done ? ', done' + (r.score != null ? `, ${r.score} percent` : '') : part ? `, ${got} of ${P.length} sections done` : ''}${opts.sel ? ', selected' : ''}${recent ? ', most recent' : ''}`;
   return `<button type="button" class="${cls}" style="${style};--glow:${c.bg}" data-act="${opts.act || 'tile'}" data-key="${key}" aria-label="${esc(label)}">
     <span class="t-code">${opts.code || compTail(k.s, k.p, k.v)}</span><span class="t-sub">${esc(sub)}</span>${opts.sel ? '<span class="t-check" aria-hidden="true"></span>' : ''}</button>`;
 }
@@ -799,7 +856,7 @@ function libHTML(sId) {
   const s = SUBJ[sId];
   const st = subjStats(sId);
   const tsel = targetSel(sId);
-  const countYear = (y) => Object.entries(state.lib).filter(([k, r]) => r.done && parseKey(k).s === sId && parseKey(k).y === y).length;
+  const countYear = (y) => fc(Object.entries(state.lib).filter(([k]) => parseKey(k).s === sId && parseKey(k).y === y).reduce((a, [k, r]) => a + creditOf(k, r), 0));
   const ser = SERIES_BY_ID[L.ser];
   const here = inTarget(tsel, L.y, L.ser);
   const blocks = s.papers.map((p) => {
@@ -807,22 +864,44 @@ function libHTML(sId) {
     if (!vs.length) return `<div class="pblock"><p class="pname">Paper ${p.n} <span>${esc(p.name)}</span></p><p class="na-note">Not set in ${ser.name}.</p></div>`;
     const keys = vs.map((v) => pkey(sId, p.id, L.y, L.ser, v));
     const formHere = ui.form && ui.form.ctx === 'lib' && keys.includes(ui.form.key);
+    const P = partsOf(`${sId}_${p.id}`);
+    const body = P
+      ? `<div class="prows">${keys.map((k) => {
+        const got = partsDone(k);
+        return `<div class="prow"><div class="tiles${here ? '' : ' off'}">${tileHTML(k, { ctx: 'lib' })}</div>
+          <div class="pparts" role="group" aria-label="${esc(`Sections of ${compCode(sId, p.id, parseKey(k).v)}`)}">${P.map((x) => {
+            const on = got.includes(x.id);
+            return `<button type="button" class="ptog${on ? ' on' : ''}" style="--pc:${col(sId, p.id).bg};--pf:${col(sId, p.id).fg}" data-act="part-tog" data-key="${k}" data-part="${x.id}" aria-pressed="${on}" title="${esc(x.name)}">${esc(x.short)}</button>`;
+          }).join('')}</div></div>`;
+      }).join('')}</div>`
+      : `<div class="tiles${here ? '' : ' off'}">${keys.map((k) => tileHTML(k, { ctx: 'lib' })).join('')}</div>`;
     return `<div class="pblock"><p class="pname">Paper ${p.n} <span>${esc(p.name)}</span></p>
-      <div class="tiles${here ? '' : ' off'}">${keys.map((k) => tileHTML(k, { ctx: 'lib' })).join('')}</div>
+      ${body}
       ${formHere ? formHTML(ui.form.key) : ''}</div>`;
   }).join('');
   const outside = st.raw - st.done;
   const headline = tsel
-    ? `<b>${st.done}</b> of ${st.target} in your target (${esc(selSummary(tsel))})${outside > 0 ? `, plus ${outside} outside it` : ''}`
-    : `<b>${st.done}</b> of ${st.target} target`;
+    ? `<b>${fc(st.done)}</b> of ${st.target} in your target (${esc(selSummary(tsel))})${outside > 0 ? `, plus ${fc(outside)} outside it` : ''}`
+    : `<b>${fc(st.done)}</b> of ${st.target} target`;
   return `<div class="lib" style="--sc:${col(sId).bg}">
     <div class="lib-head"><p>${headline}${st.avg != null ? `. Average ${Math.round(st.avg)}%, best ${st.best}%.` : '.'}</p>
       <button class="link" data-act="lib-close">Close</button></div>
     ${yearsHTML(sId, L.y, 'lib-year', countYear, tsel)}
     ${seriesHTML(sId, L.ser, 'lib-ser', tsel)}
+    ${partSummaryHTML(sId)}
     ${here ? '' : `<p class="na-note off-note">${ser.name} ${L.y} isn’t in your ${esc(s.name)} target. You can still record papers here; they just don’t count toward the percentage.</p>`}
     <div class="pblocks">${blocks}</div>
   </div>`;
+}
+
+/* For subjects with sectioned papers: how many of each section are done, in the target. */
+function partSummaryHTML(sId) {
+  const sps = SUBJ[sId].papers.map((p) => `${sId}_${p.id}`).filter(partsOf);
+  if (!sps.length) return '';
+  return `<div class="psum">${sps.map((sp) => {
+    const c = col(sId, splitSp(sp).p);
+    return `<div class="psum-p"><p class="psum-h">Paper ${paperOf(sId, splitSp(sp).p).n} sections</p>${partStats(sp).map((x) => `<div class="psum-r"><span>${esc(x.name)}</span><span class="tp-bar" aria-hidden="true"><i style="width:${x.total ? clamp((x.done / x.total) * 100, 0, 100) : 0}%;background:${c.bg}"></i></span><span class="tp-n"><b>${x.done}</b>/${x.total}</span></div>`).join('')}</div>`;
+  }).join('')}<p class="fine">Tick each section of a paper as you finish it. A section counts as its share of the paper, and the paper counts as done, including on the calendar, once every section is ticked.</p></div>`;
 }
 
 function afterLibRender(root) {
@@ -849,6 +928,7 @@ function formHTML(key) {
       <label class="fld"><span>Out of</span><input name="tot" inputmode="decimal" autocomplete="off" value="${tot}"></label>
       <output class="mf-pct" aria-live="polite">${pct}</output>
     </div>
+    ${partsOf(k.sp) ? `<fieldset class="mf-parts"><legend>Sections done</legend>${partsOf(k.sp).map((x) => `<label class="chk"><input type="checkbox" name="part" value="${x.id}" ${!r || partsDone(key).includes(x.id) ? 'checked' : ''}><span>${esc(x.name)}</span></label>`).join('')}</fieldset>` : ''}
     <p class="mf-err" hidden></p>
     <div class="mf-date">
       <label class="chk"><input type="checkbox" name="link" ${linked ? 'checked' : ''}><span>Count toward a day</span></label>
@@ -903,11 +983,12 @@ function overviewHTML() {
       if (!inTarget(sel, y, x.id)) return `<td class="off" title="Not in your target"><button class="ovc" data-act="ov" data-s="${s.id}" data-y="${y}" data-ser="${x.id}" aria-label="${esc(`${s.name} Paper ${p.n}, ${x.long} ${y}: not in your target`)}"><span class="offmark" aria-hidden="true"></span></button></td>`;
       const dots = vs.map((v) => {
         const k = pkey(s.id, p.id, y, x.id, v);
-        const on = state.lib[k] && state.lib[k].done;
-        return `<i class="dot${on ? ' on' : ''}${k === derived.recentKey ? ' recent' : ''}" style="${on ? `background:${c.bg};border-color:${c.bg}` : ''}"></i>`;
+        const cr = creditOf(k);
+        const on = cr === 1, part = cr > 0 && cr < 1;
+        return `<i class="dot${on ? ' on' : ''}${part ? ' part' : ''}${k === derived.recentKey ? ' recent' : ''}" style="${on ? `background:${c.bg};border-color:${c.bg}` : part ? `border-color:${c.bg};background:linear-gradient(to top, ${c.bg} ${Math.round(cr * 100)}%, transparent ${Math.round(cr * 100)}%)` : ''}"></i>`;
       }).join('');
-      const nDone = vs.filter((v) => state.lib[pkey(s.id, p.id, y, x.id, v)]).length;
-      return `<td><button class="ovc" data-act="ov" data-s="${s.id}" data-y="${y}" data-ser="${x.id}" aria-label="${esc(`${s.name} Paper ${p.n}, ${x.long} ${y}: ${nDone} of ${vs.length} done`)}">${dots}</button></td>`;
+      const nDone = vs.reduce((a, v) => a + creditOf(pkey(s.id, p.id, y, x.id, v)), 0);
+      return `<td><button class="ovc" data-act="ov" data-s="${s.id}" data-y="${y}" data-ser="${x.id}" aria-label="${esc(`${s.name} Paper ${p.n}, ${x.long} ${y}: ${fc(nDone)} of ${vs.length} done`)}">${dots}</button></td>`;
     }).join('')).join('');
     return `<tr class="${pi === 0 ? 'grp' : ''}"><th scope="row">${swatch(s.id, p.id)}${s.code} ${p.n}</th>${cells}</tr>`;
   }).join('')).join('');
@@ -1760,11 +1841,11 @@ function targetLine(sId, vals) {
   }
   const last = SUBJ[sId].papers.map((p) => deadlineOf(`${sId}_${p.id}`)).sort().pop();
   const days = daysUntil(last);
-  if (!left) return 'Every target here is met.';
-  if (days <= 0) return `${left} left.`;
-  if (last === FIRST_EXAM) return `${left} left, about ${fmtNum(left / days, 1)} a day to finish before your first exam on ${fmtDate(FIRST_EXAM)}.`;
+  if (left <= 0) return 'Every target here is met.';
+  if (days <= 0) return `${fc(left)} left.`;
+  if (last === FIRST_EXAM) return `${fc(left)} left, about ${fmtNum(left / days, 1)} a day to finish before your first exam on ${fmtDate(FIRST_EXAM)}.`;
   const hasExam = SUBJ[sId].papers.some((p) => EXAM_BY_SP[`${sId}_${p.id}`]);
-  return `${left} left, about ${fmtNum(left / (days / 7), 1)} a week until ${hasExam ? `the last ${SUBJ[sId].name} exam` : 'the exams end'}.`;
+  return `${fc(left)} left, about ${fmtNum(left / (days / 7), 1)} a week until ${hasExam ? `the last ${SUBJ[sId].name} exam` : 'the exams end'}.`;
 }
 
 function availableCount(sp) {
@@ -1839,7 +1920,7 @@ function targetSubjectHTML(s) {
             <input id="t-${sp}" type="number" inputmode="numeric" min="0" max="999" value="${targetOf(sp)}" data-sp="${sp}" class="t-in">
             <button class="icon-btn" data-act="t-step" data-sp="${sp}" data-d="1" aria-label="Raise Paper ${p.n} target">+</button>
           </div>
-          <span class="t-done">${doneOf(sp)} done</span>
+          <span class="t-done">${fc(doneOf(sp))} done</span>
         </div>`;
       }).join('')}
       <p class="tline" data-tline="${s.id}">${esc(targetLine(s.id))}</p>
@@ -1854,7 +1935,7 @@ function targetSubjectHTML(s) {
     <ul class="tpapers">${s.papers.map((p) => {
       const sp = `${s.id}_${p.id}`;
       const t = targetOf(sp), d = doneOf(sp);
-      return `<li><span>Paper ${p.n} <small>${esc(p.name)}</small></span><span class="tp-bar" aria-hidden="true"><i style="width:${t ? clamp((d / t) * 100, 0, 100) : 0}%;background:${col(s.id, p.id).bg}"></i></span><span class="tp-n"><b>${d}</b>/${t}</span></li>`;
+      return `<li><span>Paper ${p.n} <small>${esc(p.name)}</small></span><span class="tp-bar" aria-hidden="true"><i style="width:${t ? clamp((d / t) * 100, 0, 100) : 0}%;background:${col(s.id, p.id).bg}"></i></span><span class="tp-n"><b>${fc(d)}</b>/${t}</span></li>`;
     }).join('')}</ul>
     <p class="tline" data-tline="${s.id}">${esc(targetLine(s.id))}</p>
     ${open ? `<button class="link" data-act="t-manual" data-s="${s.id}">Set numbers by hand instead</button>` : ''}
@@ -2028,14 +2109,16 @@ function exportCSV() {
 }
 
 function exportLibCSV() {
-  const lines = [['subject', 'paper', 'component', 'year', 'series', 'variant', 'marks', 'out_of', 'score_percent', 'counted_on_day'].join(',')];
+  const lines = [['subject', 'paper', 'component', 'year', 'series', 'variant', 'marks', 'out_of', 'score_percent', 'counted_on_day', 'sections_done'].join(',')];
   const keys = Object.keys(state.lib).sort((a, b) => {
     const A = parseKey(a), B = parseKey(b);
     return ALL_SP.indexOf(A.sp) - ALL_SP.indexOf(B.sp) || B.y - A.y || A.ser.localeCompare(B.ser) || A.v - B.v;
   });
   for (const k of keys) {
     const p = parseKey(k), r = state.lib[k];
-    lines.push([SUBJ[p.s].name, paperOf(p.s, p.p).n, compCode(p.s, p.p, p.v), p.y, SERIES_BY_ID[p.ser].long, p.v, r.marksObtained, r.marksTotal, r.score, r.date].map(csvCell).join(','));
+    const P = partsOf(p.sp);
+    const secs = P ? (r.done ? 'all' : P.filter((x) => partsDone(k, r).includes(x.id)).map((x) => x.name).join('; ')) : '';
+    lines.push([SUBJ[p.s].name, paperOf(p.s, p.p).n, compCode(p.s, p.p, p.v), p.y, SERIES_BY_ID[p.ser].long, p.v, r.marksObtained, r.marksTotal, r.score, r.done ? r.date : null, secs].map(csvCell).join(','));
   }
   download(`paper-library-${todayISO()}.csv`, lines.join('\n'), 'text/csv');
 }
@@ -2061,9 +2144,13 @@ function readImport(obj) {
   }
   for (const [k, r] of Object.entries(obj.paperLibrary || {})) {
     const p = parseKey(k);
-    if (!ALL_SP.includes(p.sp) || !SERIES_BY_ID[p.ser] || !r || !r.done) continue;
+    if (!ALL_SP.includes(p.sp) || !SERIES_BY_ID[p.ser] || !r) continue;
+    const P = partsOf(p.sp);
+    const parts = P && !r.done && Array.isArray(r.parts) ? P.map((x) => x.id).filter((id) => r.parts.includes(id)) : [];
+    if (!r.done && !parts.length) continue;
     const num = (v) => (v === '' || v == null || isNaN(Number(v)) ? null : Number(v));
-    const rec = { done: true, marksObtained: num(r.marksObtained), marksTotal: num(r.marksTotal), score: num(r.score), date: r.date || null };
+    const rec = { done: !!r.done, marksObtained: num(r.marksObtained), marksTotal: num(r.marksTotal), score: num(r.score), date: r.date || null };
+    if (!r.done) rec.parts = parts;
     if (r.markedAt) rec.markedAt = Number(r.markedAt);
     recs[`p/${k}`] = rec;
   }
@@ -2331,6 +2418,14 @@ document.addEventListener('click', (ev) => {
       render();
       break;
     case 'form-cancel': ui.form = null; render(); break;
+    case 'part-tog': {
+      const got = togglePart(d.key, d.part);
+      const k = parseKey(d.key), P = partsOf(k.sp);
+      const name = P.find((x) => x.id === d.part).short;
+      commit();
+      toast(got.length === P.length ? `${compCode(k.s, k.p, k.v)} done: every section ticked.` : got.includes(d.part) ? `${name} ticked on ${compCode(k.s, k.p, k.v)}.` : `${name} unticked on ${compCode(k.s, k.p, k.v)}.`);
+      break;
+    }
     case 'paper-remove':
       confirmTap(el, () => {
         removePaper(d.key);
@@ -2596,11 +2691,16 @@ function submitPaperForm(f) {
   if (obt != null && tot != null && obt > tot) return fail('Marks can’t be more than the total.');
   if (obt != null && obt < 0) return fail('Marks can’t be negative.');
   const date = F.namedItem('link').checked ? (F.namedItem('date').value || todayISO()) : null;
-  const isNew = savePaper(key, { obt, tot, date });
+  const k = parseKey(key);
+  const P = partsOf(k.sp);
+  const parts = P ? [...f.querySelectorAll('input[name="part"]:checked')].map((i) => i.value) : null;
+  if (P && !parts.length) return fail('Tick the sections you’ve done.');
+  const isNew = savePaper(key, { obt, tot, date, parts });
   ui.form = null;
   commit();
-  const k = parseKey(key);
-  toast(isNew ? `${compCode(k.s, k.p, k.v)} marked done${date ? `, counted on ${fmtDate(date, 'dm')}` : ''}.` : 'Saved.');
+  const whole = !P || parts.length === P.length;
+  toast(!whole ? `${compCode(k.s, k.p, k.v)}: ${P.filter((x) => parts.includes(x.id)).map((x) => x.short).join(', ')} done.`
+    : isNew ? `${compCode(k.s, k.p, k.v)} marked done${date ? `, counted on ${fmtDate(date, 'dm')}` : ''}.` : 'Saved.');
 }
 
 function submitGoal(f) {
