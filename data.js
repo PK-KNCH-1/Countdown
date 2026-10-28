@@ -95,6 +95,34 @@ const EXAMS = [
 ];
 /* Times are the school's (The Indian Public School, Karur, timetable v1): be there 30 minutes before. */
 
+/* School exams (The Indian Public School, Karur), not Cambridge papers. They show in the hero, a Stats
+   tile, the calendar and the day sheet; they don't change targets, deadlines or "days left".
+   at = start time (24-hour, for ordering); short = how the paper is named in one-line summaries. */
+const SCHOOL_EXAM = { name: 'Model Exam I', full: 'Grade X Model Examination I, November 2026' };
+const SCHOOL_EXAMS = [
+  { date: '2026-11-02', at: '09:00', s: 'eng', p: 'p1', title: 'Paper 1 (FLE)', short: 'P1', time: '9:00–11:00 am', dur: '2h' },
+  { date: '2026-11-02', at: '11:30', s: 'phys', p: 'p2', title: 'Paper 2', short: 'P2', time: '11:30 am–12:15 pm', dur: '45m' },
+  { date: '2026-11-02', at: '13:30', s: 'phys', p: 'p6', title: 'Paper 6', short: 'P6', time: '1:30–2:30 pm', dur: '1h' },
+  { date: '2026-11-03', at: '09:00', s: 'tamil', p: 'p1', title: 'Paper 1', short: 'P1', time: '9:00–11:00 am', dur: '2h' },
+  { date: '2026-11-03', at: '11:15', s: 'tamil', p: 'p2', title: 'Paper 2', short: 'P2', time: '11:15 am–1:15 pm', dur: '2h' },
+  { date: '2026-11-04', at: '09:00', s: 'econ', p: 'p1', title: 'Paper 1', short: 'P1', time: '9:00–9:45 am', dur: '45m' },
+  { date: '2026-11-04', at: '10:00', s: 'econ', p: 'p2', title: 'Paper 2', short: 'P2', time: '10:00 am–12:15 pm', dur: '2h 15m' },
+  { date: '2026-11-05', at: '09:00', s: 'ict', p: 'p3', title: 'Paper 3 Practical B', short: 'P3', time: '9:00–11:15 am', dur: '2h 15m' },
+  { date: '2026-11-05', at: '13:00', s: 'ict', p: 'p1', title: 'Paper 1 Theory', short: 'P1', time: '1:00–2:30 pm', dur: '1h 30m' },
+  { date: '2026-11-06', at: '09:00', s: 'maths', p: 'p2', title: 'Paper 2', short: 'P2', time: '9:00–10:30 am', dur: '1h 30m' },
+  { date: '2026-11-06', at: '10:45', s: 'maths', p: 'p4', title: 'Paper 4', short: 'P4', time: '10:45 am–12:15 pm', dur: '1h 30m' },
+  { date: '2026-11-06', at: '13:00', s: 'maths', p: 'p6', title: 'Paper 6', short: 'P6', time: '1:00–2:30 pm', dur: '1h 30m' },
+  { date: '2026-11-10', at: '09:00', s: 'ict', p: 'p2', title: 'Paper 2 Practical A', short: 'P2', time: '9:00–11:15 am', dur: '2h 15m' },
+  { date: '2026-11-10', at: '12:30', s: 'eng', p: 'p2', title: 'Paper 2 (FLE)', short: 'P2', time: '12:30–2:30 pm', dur: '2h' },
+  { date: '2026-11-11', at: '09:00', s: 'bio', p: 'p2', title: 'Paper 2', short: 'P2', time: '9:00–9:45 am', dur: '45m' },
+  { date: '2026-11-11', at: '10:00', s: 'bio', p: 'p4', title: 'Paper 4', short: 'P4', time: '10:00–11:15 am', dur: '1h 15m' },
+  { date: '2026-11-11', at: '13:30', s: 'bio', p: 'p6', title: 'Paper 6', short: 'P6', time: '1:30–2:30 pm', dur: '1h' },
+  { date: '2026-11-12', at: '13:15', s: 'phys', p: 'p4', title: 'Paper 4', short: 'P4', time: '1:15–2:30 pm', dur: '1h 15m' },
+  { date: '2026-11-16', at: '09:00', s: 'chem', p: 'p2', title: 'Paper 2', short: 'P2', time: '9:00–9:45 am', dur: '45m' },
+  { date: '2026-11-16', at: '10:00', s: 'chem', p: 'p4', title: 'Paper 4', short: 'P4', time: '10:00–11:15 am', dur: '1h 15m' },
+  { date: '2026-11-16', at: '13:30', s: 'chem', p: 'p6', title: 'Paper 6', short: 'P6', time: '1:30–2:30 pm', dur: '1h' },
+];
+
 /* Calendar range shown in the app (inclusive months). */
 const CAL_START = { y: 2026, m: 8 };  // September 2026 (0-based month)
 const CAL_END = { y: 2027, m: 3 };    // April 2027

@@ -47,6 +47,12 @@ for (const x of EXAMS) {
   (EXAMS_BY_DATE[x.date] = EXAMS_BY_DATE[x.date] || []).push(x);
 }
 const LAST_EXAM = EXAMS[EXAMS.length - 1].date;
+// School exams (data.js): looked up by day, in start-time order.
+const SCHOOL_BY_DATE = {};
+for (const x of SCHOOL_EXAMS) (SCHOOL_BY_DATE[x.date] = SCHOOL_BY_DATE[x.date] || []).push(x);
+for (const d of Object.keys(SCHOOL_BY_DATE)) SCHOOL_BY_DATE[d].sort((a, b) => a.at.localeCompare(b.at));
+// How the Tamil subject reads mid-sentence (a shared copy may call it "the second language").
+const TAMIL_INLINE = SUBJ.tamil.inline || SUBJ.tamil.name;
 
 const splitSp = (sp) => { const i = sp.indexOf('_'); return { s: sp.slice(0, i), p: sp.slice(i + 1) }; };
 const paperOf = (sId, pId) => SUBJ[sId].papers.find((p) => p.id === pId);
@@ -302,6 +308,27 @@ function nextExams() {
   return EXAMS.filter((x) => x.date >= t);
 }
 
+/* School exam days still to come, earliest first. */
+function nextSchoolDays() {
+  const t = todayISO();
+  return Object.keys(SCHOOL_BY_DATE).filter((d) => d >= t).sort();
+}
+/* One line for a school exam day, e.g. "English P1 · Physics P2, P6". */
+function schoolDaySummary(date) {
+  const groups = [];
+  for (const x of SCHOOL_BY_DATE[date] || []) {
+    let g = groups.find((y) => y.s === x.s);
+    if (!g) { g = { s: x.s, shorts: [] }; groups.push(g); }
+    if (x.short) g.shorts.push(x.short);
+  }
+  return groups.map((g) => `${SUBJ[g.s].name}${g.shorts.length ? ` ${g.shorts.join(', ')}` : ''}`).join(' · ');
+}
+/* '13:30' -> '1:30 pm' */
+function fmtAt(at) {
+  const [h, m] = at.split(':').map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+}
+
 function weekStartOf(dateISO) {
   return addDays(dateISO, -dateObj(dateISO).getDay());
 }
@@ -407,6 +434,7 @@ function renderSyncPill() {
 /* ── Stats: a dashboard of tiles; each tile opens its own page ── */
 
 const STATS_VIEWS = {
+  school: SCHOOL_EXAM.name,
   subjects: 'Subjects and papers',
   overview: 'Completion overview',
   activity: 'Calendar activity',
@@ -416,7 +444,7 @@ const STATS_VIEWS = {
 function renderStats() {
   const el = $('#v-stats');
   if (document.body.classList.contains('printing')) {
-    el.innerHTML = [overallHTML(), subjectsHTML(), overviewHTML(), activityHTML(), examsHTML()].join('');
+    el.innerHTML = [overallHTML(), subjectsHTML(), overviewHTML(), activityHTML(), schoolHTML(), examsHTML()].join('');
     return;
   }
   const V = ui.statsView;
@@ -424,14 +452,15 @@ function renderStats() {
     const body = V === 'subjects' ? overallHTML() + subjectsHTML()
       : V === 'overview' ? overviewHTML()
         : V === 'activity' ? activityHTML()
-          : examsHTML();
+          : V === 'school' ? schoolHTML()
+            : examsHTML();
     el.innerHTML = `<div class="detail-head"><button class="back" data-act="stats-back"><span aria-hidden="true">‹</span> Stats</button><h2 class="h">${STATS_VIEWS[V]}</h2></div>
       <div class="detail${V === 'subjects' ? '' : ' detail-solo'}">${body}</div>`;
     afterLibRender(el);
     return;
   }
   el.innerHTML = `${syncBannerHTML()}
-    <div class="dash">${[progressTile(), goalsTile(), quizTile(), weekTile(), overviewTile(), examsTile()].join('')}</div>
+    <div class="dash">${[schoolTile(), progressTile(), goalsTile(), quizTile(), weekTile(), overviewTile(), examsTile()].join('')}</div>
     ${PREVIEW ? '' : '<div class="print-row"><button class="btn small" data-act="print">Print or save as PDF</button></div>'}`;
 }
 
@@ -587,6 +616,45 @@ function examsTile() {
     }).join('')}</ul></section>`;
 }
 
+function schoolTile() {
+  const days = nextSchoolDays().slice(0, 3);
+  if (!days.length) return '';
+  return `<section class="wt wt-full" data-act="stats-open" data-v="school" aria-label="${esc(SCHOOL_EXAM.name)}. Open its timetable.">${tileHead(esc(SCHOOL_EXAM.name), 'data-act="stats-open" data-v="school"')}
+    <ul class="wt-exams">${days.map((date) => {
+      const d = daysUntil(date), dd = dateObj(date), first = SCHOOL_BY_DATE[date][0];
+      return `<li style="--sc:${col(first.s, first.p).bg}"><span class="d"><b>${dd.getDate()}</b>${dd.toLocaleDateString('en-GB', { weekday: 'short' })}</span>
+        <span class="t"><b>${esc(schoolDaySummary(date))}</b> from ${fmtAt(first.at)}</span>
+        <span class="n">${d === 0 ? 'Today' : `${d}<small> ${d === 1 ? 'day' : 'days'}</small>`}</span></li>`;
+    }).join('')}</ul></section>`;
+}
+
+function schoolHTML() {
+  const t = todayISO();
+  const list = SCHOOL_EXAMS.filter((x) => x.date >= t).sort((a, b) => a.date.localeCompare(b.date) || a.at.localeCompare(b.at));
+  if (!list.length) return '';
+  let prev = '';
+  const rows = list.map((x) => {
+    const first = x.date !== prev;
+    prev = x.date;
+    const d = daysUntil(x.date), dd = dateObj(x.date);
+    return `<li class="${first ? '' : 'sx-more'}${x.date === list[0].date ? ' next' : ''}" style="--sc:${col(x.s, x.p).bg}">
+      <span class="ex-date">${first ? `<b>${dd.getDate()}</b>${dd.toLocaleDateString('en-GB', { weekday: 'short' })}` : ''}</span>
+      <span class="ex-main"><b>${esc(SUBJ[x.s].name)}</b> ${esc(x.title)}<small>${esc(x.dur ? `${x.time}, ${x.dur}` : x.time)}</small></span>
+      <span class="ex-left">${first ? (d === 0 ? '<b>Today</b>' : `<b>${d}</b>${d === 1 ? 'day' : 'days'}`) : ''}</span></li>`;
+  }).join('');
+  return `<section class="block"><h2 class="h">${esc(SCHOOL_EXAM.name)}</h2><ol class="exams school">${rows}</ol>
+    <p class="fine">${esc(SCHOOL_EXAM.full)}, from the school’s timetable. These don’t change your targets or the countdown to your Cambridge papers.</p></section>`;
+}
+
+function heroSchoolHTML() {
+  const sd = nextSchoolDays()[0];
+  if (!sd) return '';
+  const n = daysUntil(sd);
+  if (n > 30) return '';
+  const when = n === 0 ? 'today' : n === 1 ? `tomorrow, ${fmtDate(sd)}` : `in ${n} days, ${fmtDate(sd)}`;
+  return `<button class="hero-school" data-act="stats-open" data-v="school"><b>${esc(SCHOOL_EXAM.name)}</b> ${when}: ${esc(schoolDaySummary(sd))}</button>`;
+}
+
 function heroHTML() {
   const list = nextExams();
   const t = totals();
@@ -608,6 +676,7 @@ function heroHTML() {
   return `<div class="hero-count">${count}</div>
     <p class="hero-next"><b>${esc(SUBJ[nx.s].name)} ${esc(nx.title)}</b>, ${esc(nx.code)}, ${fmtDate(nx.date, 'long')}${nx.time ? `, ${esc(nx.time)}` : ''}</p>
     ${same.length ? `<p class="hero-also">Same day: ${same.map((x) => `${esc(SUBJ[x.s].name)} ${esc(x.title)} (${esc(x.time || x.session.toLowerCase())})`).join(', ')}</p>` : ''}
+    ${heroSchoolHTML()}
     ${stats}
     <button class="btn primary" data-act="log-today">Log today’s revision</button>`;
 }
@@ -912,7 +981,7 @@ function examsHTML() {
       <span class="ex-left">${d === 0 ? '<b>Today</b>' : `<b>${d}</b>${d === 1 ? 'day' : 'days'}`}</span></li>`;
   }).join('');
   return `<section class="block"><h2 class="h">Exam countdown</h2><ol class="exams">${rows}</ol>
-    <p class="fine">Tamil isn’t on this timetable, so it has no countdown here. Check practical routes and English titles on your Statement of Entry.</p></section>`;
+    <p class="fine">${esc(TAMIL_INLINE.charAt(0).toUpperCase() + TAMIL_INLINE.slice(1))} isn’t on this timetable, so it has no countdown here. Check practical routes and English titles on your Statement of Entry.</p></section>`;
 }
 
 /* ── Calendar ── */
@@ -985,7 +1054,7 @@ function renderCalendar() {
       ${cells}
     </div>
     <p class="cal-sum">${monthSum}</p>
-    <div class="cal-legend"><span><i class="lg-today"></i>Today</span><span><i class="lg-exam"></i>Exam day</span><span><i class="lg-rest"></i>Rest day</span></div>`;
+    <div class="cal-legend"><span><i class="lg-today"></i>Today</span><span><i class="lg-exam"></i>Exam day</span>${SCHOOL_EXAMS.length ? `<span><i class="lg-school"></i>${esc(SCHOOL_EXAM.name)}</span>` : ''}<span><i class="lg-rest"></i>Rest day</span></div>`;
 }
 
 function monthSummary(y, m) {
@@ -1011,14 +1080,16 @@ function dayCellHTML(date) {
   let planned = 0, done = 0;
   for (const sp of sps) { planned += e[sp].planned || 0; done += e[sp].done || 0; }
   const exams = EXAMS_BY_DATE[date] || [];
+  const school = SCHOOL_BY_DATE[date] || [];
   const t = todayISO();
-  const cls = ['day', date === t ? 'today' : '', exams.length ? 'exam' : '', e.__rest ? 'rest' : '', date < t ? 'past' : ''].filter(Boolean).join(' ');
+  const cls = ['day', date === t ? 'today' : '', exams.length ? 'exam' : '', school.length && !exams.length ? 'school' : '', e.__rest ? 'rest' : '', date < t ? 'past' : ''].filter(Boolean).join(' ');
   const shown = sps.slice(0, 4);
   const tags = shown.map((sp) => { const { s, p } = splitSp(sp); const c = col(s, p); return `<i style="background:${c.bg};color:${c.fg}">${spTag(sp)}</i>`; }).join('') + (sps.length > 4 ? `<i class="more">+${sps.length - 4}</i>` : '');
-  const xtags = exams.map((x) => `<i class="xtag" style="--sc:${col(x.s, x.p).bg}">${SUBJ[x.s].code}${paperOf(x.s, x.p).n}</i>`).join('');
+  const xtags = exams.map((x) => `<i class="xtag" style="--sc:${col(x.s, x.p).bg}">${SUBJ[x.s].code}${paperOf(x.s, x.p).n}</i>`).join('')
+    + [...new Set(school.map((x) => x.s))].map((s) => `<i class="stag">${SUBJ[s].code}</i>`).join('');
   const frac = planned ? `${done}/${planned}` : (done ? `${done} done` : '');
   const d = dateObj(date);
-  const aria = `${fmtDate(date, 'day')}${exams.length ? ', exam: ' + exams.map((x) => `${SUBJ[x.s].name} ${x.title}`).join(' and ') : ''}${e.__rest ? ', rest day' : ''}${sps.length ? `, ${sps.map(spLabel).join(', ')}` : ''}${frac ? `, ${done} done of ${planned} planned` : ''}`;
+  const aria = `${fmtDate(date, 'day')}${exams.length ? ', exam: ' + exams.map((x) => `${SUBJ[x.s].name} ${x.title}`).join(' and ') : ''}${school.length ? `, ${SCHOOL_EXAM.name}: ${schoolDaySummary(date)}` : ''}${e.__rest ? ', rest day' : ''}${sps.length ? `, ${sps.map(spLabel).join(', ')}` : ''}${frac ? `, ${done} done of ${planned} planned` : ''}`;
   return `<button class="${cls}" data-day="${date}" data-act="day" aria-label="${esc(aria)}">
     <span class="dnum">${d.getDate()}</span>
     ${xtags ? `<span class="dx">${xtags}</span>` : ''}
@@ -1162,6 +1233,8 @@ function closeSheet() { ui.sheet = null; renderSheet(); }
 function daySheetHTML(S) {
   const exams = EXAMS_BY_DATE[S.date] || [];
   const examHTML = exams.map((x) => `<p class="sheet-exam" style="--sc:${col(x.s, x.p).bg}">Exam: <b>${esc(SUBJ[x.s].name)}</b> ${esc(x.title)}, ${esc(x.code)}, ${esc(x.time ? `${x.time} (${x.dur})` : x.session.toLowerCase())}</p>`).join('');
+  const school = SCHOOL_BY_DATE[S.date] || [];
+  const schoolSheet = school.length ? `<div class="sheet-school"><p class="ss-h">${esc(SCHOOL_EXAM.name)}</p><ul>${school.map((x) => `<li style="--sc:${col(x.s, x.p).bg}"><b>${esc(SUBJ[x.s].name)}</b> ${esc(x.title)}<span>${esc(x.dur ? `${x.time} (${x.dur})` : x.time)}</span></li>`).join('')}</ul></div>` : '';
   const rows = S.rows.map((r, i) => {
     const { s, p } = splitSp(r.sp);
     return `<div class="dayrow">
@@ -1186,7 +1259,7 @@ function daySheetHTML(S) {
     return `<li>${swatch(p.s, p.p)}<b>${compCode(p.s, p.p, p.v)}</b> ${SER_SHORT[p.ser]} ${p.y}${r.score != null ? `<span>${r.score}%</span>` : ''}</li>`;
   }).join('')}</ul></div>` : '';
   return `<div class="sheet-h"><h2 id="sheetTitle">${fmtDate(S.date, 'day')}</h2><button class="icon-btn" data-act="sheet-close" aria-label="Close">×</button></div>
-    ${examHTML}
+    ${examHTML}${schoolSheet}
     ${S.rest ? '<p class="sheet-rest">Rest day. Nothing planned.</p>' : `<div class="dayrows">${rows || '<p class="fine">No papers on this day yet. Add the ones you planned or did.</p>'}</div>
     <button class="btn" data-act="dayrow-toggle-add" aria-expanded="${S.adding}">${S.adding ? 'Hide paper list' : 'Add a paper'}</button>${chooser}`}
     <label class="chk sheet-restchk"><input type="checkbox" data-act="day-rest" ${S.rest ? 'checked' : ''}><span>Rest day</span></label>
@@ -1732,7 +1805,7 @@ function renderTargets() {
   const cs = commonSel();
   el.innerHTML = `
     <div class="view-head"><h2 class="h">Targets</h2></div>
-    <p class="fine">Pick the years and series you want to cover. Each target is every paper Cambridge actually set in them, so ICT practicals and Tamil come out smaller on their own. Every percentage in the app is measured against these.</p>
+    <p class="fine">Pick the years and series you want to cover. Each target is every paper Cambridge actually set in them, so ICT practicals and ${esc(TAMIL_INLINE)} come out smaller on their own. Every percentage in the app is measured against these.</p>
     <section class="block tglobal">
       <h3 class="h">Set every subject at once</h3>
       <p class="tlabel">Years</p>${yearPickHTML(G.years, 'tg-year')}${presetsHTML('tg-preset')}
@@ -2046,7 +2119,7 @@ async function overviewPDF() {
       doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(...ink);
       doc.text('Countdown: revision plan', M, 14);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...muted);
-      doc.text(`Exported ${fmtDate(todayISO(), 'long')}. Coloured bars are papers planned; red outline is an exam day.`, M, 19);
+      doc.text(`Exported ${fmtDate(todayISO(), 'long')}. Coloured bars are papers planned; red outline is an exam day${SCHOOL_EXAMS.length ? `; blue outline is ${SCHOOL_EXAM.name}` : ''}.`, M, 19);
       let lx = M;
       SUBJECTS.forEach((s) => {
         const c = col(s.id, null, true).rgb;
@@ -2086,6 +2159,11 @@ async function overviewPDF() {
         doc.rect(cx + 0.3, cy + 0.3, cell - 0.6, rowH - 0.6);
         doc.setFontSize(4.8); doc.setTextColor(200, 40, 60);
         doc.text(ex.map((x) => x.code).join(' '), cx + 1, cy + rowH - 1.2);
+      } else if (SCHOOL_BY_DATE[date]) {
+        doc.setDrawColor(36, 94, 122); doc.setLineWidth(0.4);
+        doc.rect(cx + 0.3, cy + 0.3, cell - 0.6, rowH - 0.6);
+        doc.setFontSize(4.8); doc.setTextColor(36, 94, 122);
+        doc.text([...new Set(SCHOOL_BY_DATE[date].map((x) => SUBJ[x.s].code))].join(' '), cx + 1, cy + rowH - 1.2);
       }
       doc.setFontSize(6.5); doc.setTextColor(...ink);
       doc.text(String(d), cx + 1, cy + 3.2);
