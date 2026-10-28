@@ -43,6 +43,8 @@ const SERIES = [
 
 const YEARS = [2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016];
 const TARGET_YEARS = [2020, 2021, 2022, 2023, 2024, 2025, 2026];
+/* Subjects whose past papers go further back than YEARS. Tamil: May/June, Paper 1 and Paper 2, from 2010. */
+const EXTRA_YEARS = { tamil: [2015, 2014, 2013, 2012, 2011, 2010] };
 
 /* Which variants genuinely exist, by subject → series → paper. */
 const PP_AVAILABILITY = (() => {

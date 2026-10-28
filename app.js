@@ -39,6 +39,9 @@ const PREVIEW = !!(window.COUNTDOWN_CONFIG && window.COUNTDOWN_CONFIG.preview);
 const SUBJ = Object.fromEntries(SUBJECTS.map((s) => [s.id, s]));
 const ALL_SP = SUBJECTS.flatMap((s) => s.papers.map((p) => `${s.id}_${p.id}`));
 const SERIES_BY_ID = Object.fromEntries(SERIES.map((s) => [s.id, s]));
+// Years a subject's past papers cover, newest first (Tamil goes back further than the rest).
+const yearsFor = (sId) => (EXTRA_YEARS[sId] ? YEARS.concat(EXTRA_YEARS[sId]) : YEARS);
+const ALL_YEARS = [...new Set(SUBJECTS.flatMap((s) => yearsFor(s.id)))].sort((a, b) => b - a);
 const SER_SHORT = { ON: 'O/N', MJ: 'M/J', FM: 'F/M' };
 const EXAM_BY_SP = {};
 const EXAMS_BY_DATE = {};
@@ -47,6 +50,7 @@ for (const x of EXAMS) {
   (EXAMS_BY_DATE[x.date] = EXAMS_BY_DATE[x.date] || []).push(x);
 }
 const LAST_EXAM = EXAMS[EXAMS.length - 1].date;
+const FIRST_EXAM = EXAMS[0].date;
 // School exams (data.js): looked up by day, in start-time order.
 const SCHOOL_BY_DATE = {};
 for (const x of SCHOOL_EXAMS) (SCHOOL_BY_DATE[x.date] = SCHOOL_BY_DATE[x.date] || []).push(x);
@@ -70,7 +74,9 @@ function compCode(sId, pId, v) {
 const compTail = (sId, pId, v) => `${paperOf(sId, pId).n}${v}`;
 const spLabel = (sp) => { const { s, p } = splitSp(sp); return `${SUBJ[s].name} Paper ${paperOf(s, p).n}`; };
 const spTag = (sp) => { const { s, p } = splitSp(sp); return `${SUBJ[s].code}${paperOf(s, p).n}`; };
-const deadlineOf = (sp) => (EXAM_BY_SP[sp] ? EXAM_BY_SP[sp].date : LAST_EXAM);
+// Past papers should all be done before the first board exam; once that has started, each
+// paper's own exam (or the last exam, for subjects not on the timetable) is the deadline.
+const deadlineOf = (sp) => (daysUntil(FIRST_EXAM) > 0 ? FIRST_EXAM : EXAM_BY_SP[sp] ? EXAM_BY_SP[sp].date : LAST_EXAM);
 
 /* ───────────── colour: one hue per subject, one lightness step per paper ───────────── */
 
@@ -578,7 +584,7 @@ function overviewTile() {
   const sels = Object.fromEntries(SUBJECTS.map((s) => [s.id, targetSel(s.id)]));
   const ySet = new Set();
   SUBJECTS.forEach((s) => (sels[s.id] ? sels[s.id].years : TARGET_YEARS).forEach((y) => ySet.add(y)));
-  const years = YEARS.filter((y) => ySet.has(y)).slice(0, 8).reverse();
+  const years = ALL_YEARS.filter((y) => ySet.has(y)).slice(0, 8).reverse();
   let inT = 0, doneT = 0;
   const rows = SUBJECTS.map((s) => {
     const sel = sels[s.id];
@@ -720,7 +726,7 @@ function overallHTML() {
         <div><dt>Days to last exam</dt><dd>${Math.max(0, daysUntil(LAST_EXAM))}</dd></div>
       </dl>
     </div>
-    <p class="fine">“A day needed” at the top spreads each paper’s remaining target over the days until that paper’s own exam. Percentages count only papers recorded in the Paper Library.</p>
+    <p class="fine">“A day needed” at the top is every past paper still left in your targets, spread over the days before your first exam (${esc(SUBJ[EXAMS[0].s].name)} ${esc(EXAMS[0].title)}, ${fmtDate(FIRST_EXAM)}), counting today, so you finish them all before the exams begin. Percentages count only papers recorded in the Paper Library.</p>
   </section>`;
 }
 
@@ -759,7 +765,7 @@ function defaultLibPos(sId) {
 }
 
 function yearsHTML(sId, sel, act, countFn, tsel) {
-  return `<div class="years" role="group" aria-label="Year">${YEARS.map((y) => {
+  return `<div class="years" role="group" aria-label="Year">${yearsFor(sId).map((y) => {
     const n = countFn(y);
     const off = tsel && !tsel.years.includes(y);
     return `<button type="button" class="yr${y === sel ? ' on' : ''}${off ? ' off' : ''}" data-act="${act}" data-y="${y}" aria-pressed="${y === sel}"${off ? ' title="Not in your target"' : ''}>${y}${n ? `<small>${n}</small>` : ''}</button>`;
@@ -883,16 +889,16 @@ function overviewHTML() {
     // Subjects with hand-set numbers have no year range, so show every year they've touched too.
     let minY = 2020;
     for (const k of Object.keys(state.lib)) minY = Math.min(minY, parseKey(k).y);
-    YEARS.filter((y) => y >= minY).forEach((y) => ySet.add(y));
+    ALL_YEARS.filter((y) => y >= minY).forEach((y) => ySet.add(y));
   }
-  const years = YEARS.filter((y) => ySet.has(y));
+  const years = ALL_YEARS.filter((y) => ySet.has(y));
   const head1 = years.map((y) => `<th colspan="3" scope="colgroup">${y}</th>`).join('');
   const head2 = years.map(() => SERIES.map((x) => `<th scope="col" title="${x.long}">${SER_SHORT[x.id]}</th>`).join('')).join('');
   const body = SUBJECTS.map((s) => s.papers.map((p, pi) => {
     const c = col(s.id, p.id);
     const sel = sels[s.id];
     const cells = years.map((y) => SERIES.map((x) => {
-      const vs = variants(s.id, x.id, p.id);
+      const vs = yearsFor(s.id).includes(y) ? variants(s.id, x.id, p.id) : [];
       if (!vs.length) return `<td class="na" title="Not offered"><span class="hatch" aria-label="Not offered"></span></td>`;
       if (!inTarget(sel, y, x.id)) return `<td class="off" title="Not in your target"><button class="ovc" data-act="ov" data-s="${s.id}" data-y="${y}" data-ser="${x.id}" aria-label="${esc(`${s.name} Paper ${p.n}, ${x.long} ${y}: not in your target`)}"><span class="offmark" aria-hidden="true"></span></button></td>`;
       const dots = vs.map((v) => {
@@ -1518,7 +1524,7 @@ function gridModel(D) {
   const tsel = targetSel(D.s);
   const base = tsel && tsel.years.length ? tsel.years : TARGET_YEARS;
   const picked = new Set(D.keys.map(parseKey).filter((p) => p.s === D.s).map((p) => p.y)); // never hide a year that has papers in the goal
-  const years = YEARS.filter((y) => D.showAll || base.includes(y) || picked.has(y));
+  const years = yearsFor(D.s).filter((y) => D.showAll || base.includes(y) || picked.has(y));
   const sers = SERIES.filter((x) => seriesOffered(D.s, x.id));
   const rows = [];
   for (const y of years) sers.forEach((x, i) => rows.push({ y, ser: x.id, firstOfYear: i === 0, span: sers.length }));
@@ -1527,7 +1533,7 @@ function gridModel(D) {
     const vs = [...new Set(SERIES.flatMap((x) => variants(D.s, x.id, p.id)))].sort((a, b) => a - b);
     vs.forEach((v, i) => cols.push({ p: p.id, n: p.n, v, first: i === 0 }));
   }
-  return { rows, cols, hidden: YEARS.length - years.length };
+  return { rows, cols, hidden: yearsFor(D.s).length - years.length };
 }
 
 const cellKey = (D, row, c) => (variants(D.s, row.ser, c.p).includes(c.v) ? pkey(D.s, c.p, row.y, row.ser, c.v) : null);
@@ -1756,6 +1762,7 @@ function targetLine(sId, vals) {
   const days = daysUntil(last);
   if (!left) return 'Every target here is met.';
   if (days <= 0) return `${left} left.`;
+  if (last === FIRST_EXAM) return `${left} left, about ${fmtNum(left / days, 1)} a day to finish before your first exam on ${fmtDate(FIRST_EXAM)}.`;
   const hasExam = SUBJ[sId].papers.some((p) => EXAM_BY_SP[`${sId}_${p.id}`]);
   return `${left} left, about ${fmtNum(left / (days / 7), 1)} a week until ${hasExam ? `the last ${SUBJ[sId].name} exam` : 'the exams end'}.`;
 }
@@ -1766,7 +1773,7 @@ function availableCount(sp) {
 }
 
 function yearPickHTML(years, act, sId) {
-  return `<div class="ypick" role="group" aria-label="Years">${YEARS.map((y) => {
+  return `<div class="ypick" role="group" aria-label="Years">${(sId ? yearsFor(sId) : YEARS).map((y) => {
     const on = years.includes(y);
     return `<button type="button" class="ychip${on ? ' on' : ''}" data-act="${act}" data-y="${y}"${sId ? ` data-s="${sId}"` : ''} aria-pressed="${on}">${y}</button>`;
   }).join('')}</div>`;
@@ -1785,10 +1792,10 @@ function presetsHTML(act, sId) {
   return `<div class="presets"><button type="button" class="link" data-act="${act}" data-p="2020"${ds}>2020–2026</button><button type="button" class="link" data-act="${act}" data-p="last3"${ds}>Last 3 years</button><button type="button" class="link" data-act="${act}" data-p="all"${ds}>Every year</button><button type="button" class="link" data-act="${act}" data-p="none"${ds}>Clear</button></div>`;
 }
 
-function presetYears(p) {
+function presetYears(p, sId) {
   if (p === '2020') return TARGET_YEARS.slice();
   if (p === 'last3') return [2026, 2025, 2024];
-  if (p === 'all') return YEARS.slice();
+  if (p === 'all') return (sId ? yearsFor(sId) : YEARS).slice();
   return [];
 }
 
@@ -2048,7 +2055,7 @@ function readImport(obj) {
   for (const [sId, sel] of Object.entries(obj.targetSelection || {})) {
     if (!SUBJ[sId] || !sel || typeof sel !== 'object') continue;
     recs[`ts/${sId}`] = sel.manual ? { manual: true } : {
-      years: (sel.years || []).map(Number).filter((y) => YEARS.includes(y)),
+      years: (sel.years || []).map(Number).filter((y) => yearsFor(sId).includes(y)),
       series: (sel.series || []).filter((x) => SERIES_BY_ID[x]),
     };
   }
@@ -2458,7 +2465,7 @@ document.addEventListener('click', (ev) => {
       const next = { years: sel.years.slice(), series: sel.series.slice() };
       if (act === 't-year') { const y = Number(d.y); next.years = next.years.includes(y) ? next.years.filter((x) => x !== y) : next.years.concat(y); }
       if (act === 't-ser') next.series = next.series.includes(d.ser) ? next.series.filter((x) => x !== d.ser) : next.series.concat(d.ser);
-      if (act === 't-preset') next.years = presetYears(d.p);
+      if (act === 't-preset') next.years = presetYears(d.p, d.s);
       writeSel(d.s, next);
       commit({ noRender: true });
       refreshTargetSubject(d.s);
@@ -2492,7 +2499,9 @@ document.addEventListener('click', (ev) => {
     }
     case 'tg-apply':
       confirmTap(el, () => {
-        for (const sub of SUBJECTS) writeSel(sub.id, ui.tglobal);
+        // "Every year" means every year each subject has (Tamil goes back to 2010).
+        const every = YEARS.every((y) => ui.tglobal.years.includes(y));
+        for (const sub of SUBJECTS) writeSel(sub.id, every ? { years: yearsFor(sub.id).slice(), series: ui.tglobal.series } : ui.tglobal);
         commit();
         toast(`Every subject now targets ${selSummary(ui.tglobal)}.`);
       }, 'Tap again to replace every target');
