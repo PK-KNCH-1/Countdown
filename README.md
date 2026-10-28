@@ -13,8 +13,10 @@ between devices through a small Supabase database.
 | `data.js` | Exam data only: subjects, timetable, which past-paper variants exist |
 | `sync.js` | Local record store and cloud sync |
 | `app.js` | Everything you see and do: Stats, Paper Library, Calendar, Goals, Targets, Sync |
-| `quiz.js` | Daily quiz engine (scheduling, question types, cheat sheets) and the Chemistry tests deck |
-| `qz-chem.js`, `qz-phys.js`, `qz-bio.js`, `qz-maths.js`, `qz-econ.js` | Quiz decks: definitions, equations, values, food tests, circle theorems and more, one file per subject |
+| `quiz.js` | Quiz engine: daily recall (scheduling, self-marking, undo), written definitions, browse sheet, and the Chemistry picture deck (cation, anion and flame tests, solubility) |
+| `qn-phys.js`, `qn-chem.js`, `qn-bio.js`, `qn-maths.js` | Quiz decks generated from the revision notes: formulas, values, laws, describe-and-explain points, differences, experiments, tests, key points, and the definitions to write out |
+| `qz-econ.js` | Economics definitions (for the written-definitions section) |
+| `katex/` | KaTeX stylesheet and fonts, used to display the maths formulas |
 | `config.js` | Supabase project URL and its public (publishable) key |
 | `sw.js` | Service worker that keeps the app usable offline |
 | `supabase/schema.sql` | Tables and the two sync functions |
@@ -35,13 +37,25 @@ so keep it private.
 
 Without a link the app still works fully on one device, using browser storage.
 
-## Daily quiz
+## Quiz
 
-Short daily recall across Chemistry, Physics, Biology, Maths and Economics, with a switch per subject and
-a choice of 10–30 new questions a day. Questions follow a Leitner schedule (1, 3, 7, 14, 30 days) and are
-stored as `q/<id>` records, so progress syncs. Definitions are written with their key words in braces and
-asked as fill-in-the-key-words questions; wording follows each subject's current Cambridge syllabus
-(0610/0620/0625 2026–2028, 0607 2025–2027, 0455 2027–2029). Each deck adds its own cheat sheet.
+**Daily recall.** Every card comes from the revision notes for Physics 0625, Chemistry 0620, Biology 0610 and
+International Maths 0607: formulas (shown on their own in a box, with symbols and rearranged forms beside them),
+values, laws, describe-and-explain points, differences, experiments, tests and key points. You answer in your head
+or on paper, reveal the answer and mark yourself: *knew it*, *partly* or *didn't know*. Cards follow a Leitner
+schedule (1, 3, 7, 14, 30 days): knew it moves a card up a box, partly keeps its box and brings it back sooner,
+didn't know sends it back to tomorrow and repeats it once at the end of the session. New cards come chapter by
+chapter, subjects taking turns; a ★ on a chapter puts its new cards first. Subjects and types of card can be
+switched off, and any chapter or type can be practised on its own. Keyboard: Space shows the answer, 1/2/3 mark it,
+U undoes the last mark. The Chemistry picture deck (cation, anion and flame tests, solubility) is multiple choice.
+
+**Write definitions.** The app lists the terms; you write the definitions on paper, then mark each one correct,
+partly or wrong against the notes. Marks are kept per definition and scheduled the same way, so wrong and partly
+ones come back first. *All my marks* shows every definition with its latest mark.
+
+Progress is stored as records `q/<id>` (box, due date, counts, last mark) and `qd/<date>`, and settings as
+`qs/cfg`, so it syncs between devices. The `qn-*.js` decks are generated from the notes; regenerate them rather
+than editing them by hand.
 
 ## Moving data from the old app
 

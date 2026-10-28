@@ -1987,9 +1987,13 @@ function readImport(obj) {
     if (r.markedAt) rec.markedAt = Number(r.markedAt);
     recs[`p/${k}`] = rec;
   }
-  for (const [id, r] of Object.entries(obj.quiz || {})) if (QZ.BY_ID[id] && r && typeof r === 'object') recs[`q/${id}`] = r;
+  for (const [id, r] of Object.entries(obj.quiz || {})) if (QZ.known(id) && r && typeof r === 'object') recs[`q/${id}`] = r;
   for (const [d, r] of Object.entries(obj.quizDays || {})) if (/^\d{4}-\d{2}-\d{2}$/.test(d) && r && typeof r === 'object') recs[`qd/${d}`] = r;
-  if (obj.quizSettings && typeof obj.quizSettings === 'object') recs['qs/cfg'] = { off: Array.isArray(obj.quizSettings.off) ? obj.quizSettings.off.filter((x) => typeof x === 'string') : [], n: Number(obj.quizSettings.n) || QZ_NEW_DEFAULT, defs: obj.quizSettings.defs === true };
+  if (obj.quizSettings && typeof obj.quizSettings === 'object') {
+    const q = obj.quizSettings;
+    const strs = (x) => (Array.isArray(x) ? x.filter((y) => typeof y === 'string') : undefined);
+    recs['qs/cfg'] = { off: strs(q.off) || [], n: Number(q.n) || QZ_NEW_DEFAULT, toff: strs(q.toff), focus: q.focus && typeof q.focus === 'object' ? q.focus : {} };
+  }
   const goals = Array.isArray(obj.goals) ? obj.goals : Object.values(obj.goals || {});
   for (const g of goals) {
     if (!g || !g.id) continue;
@@ -2467,7 +2471,7 @@ document.addEventListener('click', (ev) => {
       }, 'Tap again to erase everything');
       break;
     default:
-      if (act.startsWith('qz-')) quizClick(el, act, d);
+      if (act.startsWith('qz-') || act.startsWith('qd-')) quizClick(el, act, d);
       break;
   }
 });
