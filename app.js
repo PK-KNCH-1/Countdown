@@ -70,6 +70,13 @@ function parseKey(k) {
 /* Sections of a paper (ICT practicals), and how much of a recorded paper is done (0 to 1).
    A record with done: true has every section; a partly done one lists its sections in parts. */
 const partsOf = (sp) => PAPER_PARTS[sp] || null;
+const partWord = (sp, plural = true) => `${PART_WORD[sp] || 'section'}${plural ? 's' : ''}`;
+const capFirst = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+// "0417/31 M/J 2024", or "Tamil Paper 1, M/J 2019" for papers without a component code.
+function paperName(key) {
+  const k = parseKey(key), s = SUBJ[k.s];
+  return s.syl ? `${compCode(k.s, k.p, k.v)} ${SER_SHORT[k.ser]} ${k.y}` : `${s.name} Paper ${paperOf(k.s, k.p).n}, ${SER_SHORT[k.ser]} ${k.y}`;
+}
 function partsDone(key, r = state.lib[key]) {
   const P = partsOf(parseKey(key).sp);
   if (!P || !r) return [];
@@ -846,7 +853,7 @@ function tileHTML(key, opts = {}) {
     : part ? `border-color:${c.bg};background:linear-gradient(to top, color-mix(in srgb, ${c.bg} 40%, var(--surface)) ${fill}%, var(--surface) ${fill}%)` : `border-color:${c.bg}`;
   const sub = opts.sub || (done ? (r.score != null ? `${r.score}%` : 'Done') : part ? `${got}/${P.length}` : '');
   const cls = ['tile', done ? 'done' : '', part ? 'part' : '', recent ? 'recent' : '', opts.sel ? 'sel' : '', ui.form && ui.form.key === key && ui.form.ctx === opts.ctx ? 'editing' : ''].filter(Boolean).join(' ');
-  const label = `${compCode(k.s, k.p, k.v)} ${SERIES_BY_ID[k.ser].long} ${k.y}${done ? ', done' + (r.score != null ? `, ${r.score} percent` : '') : part ? `, ${got} of ${P.length} sections done` : ''}${opts.sel ? ', selected' : ''}${recent ? ', most recent' : ''}`;
+  const label = `${compCode(k.s, k.p, k.v)} ${SERIES_BY_ID[k.ser].long} ${k.y}${done ? ', done' + (r.score != null ? `, ${r.score} percent` : '') : part ? `, ${got} of ${P.length} ${partWord(k.sp)} done` : ''}${opts.sel ? ', selected' : ''}${recent ? ', most recent' : ''}`;
   return `<button type="button" class="${cls}" style="${style};--glow:${c.bg}" data-act="${opts.act || 'tile'}" data-key="${key}" aria-label="${esc(label)}">
     <span class="t-code">${opts.code || compTail(k.s, k.p, k.v)}</span><span class="t-sub">${esc(sub)}</span>${opts.sel ? '<span class="t-check" aria-hidden="true"></span>' : ''}</button>`;
 }
@@ -869,7 +876,7 @@ function libHTML(sId) {
       ? `<div class="prows">${keys.map((k) => {
         const got = partsDone(k);
         return `<div class="prow"><div class="tiles${here ? '' : ' off'}">${tileHTML(k, { ctx: 'lib' })}</div>
-          <div class="pparts" role="group" aria-label="${esc(`Sections of ${compCode(sId, p.id, parseKey(k).v)}`)}">${P.map((x) => {
+          <div class="pparts" role="group" aria-label="${esc(`${capFirst(partWord(`${sId}_${p.id}`))} of ${paperName(k)}`)}">${P.map((x) => {
             const on = got.includes(x.id);
             return `<button type="button" class="ptog${on ? ' on' : ''}" style="--pc:${col(sId, p.id).bg};--pf:${col(sId, p.id).fg}" data-act="part-tog" data-key="${k}" data-part="${x.id}" aria-pressed="${on}" title="${esc(x.name)}">${esc(x.short)}</button>`;
           }).join('')}</div></div>`;
@@ -900,8 +907,8 @@ function partSummaryHTML(sId) {
   if (!sps.length) return '';
   return `<div class="psum">${sps.map((sp) => {
     const c = col(sId, splitSp(sp).p);
-    return `<div class="psum-p"><p class="psum-h">Paper ${paperOf(sId, splitSp(sp).p).n} sections</p>${partStats(sp).map((x) => `<div class="psum-r"><span>${esc(x.name)}</span><span class="tp-bar" aria-hidden="true"><i style="width:${x.total ? clamp((x.done / x.total) * 100, 0, 100) : 0}%;background:${c.bg}"></i></span><span class="tp-n"><b>${x.done}</b>/${x.total}</span></div>`).join('')}</div>`;
-  }).join('')}<p class="fine">Tick each section of a paper as you finish it. A section counts as its share of the paper, and the paper counts as done, including on the calendar, once every section is ticked.</p></div>`;
+    return `<div class="psum-p"><p class="psum-h">Paper ${paperOf(sId, splitSp(sp).p).n} ${partWord(sp)}</p>${partStats(sp).map((x) => `<div class="psum-r"><span>${esc(x.name)}</span><span class="tp-bar" aria-hidden="true"><i style="width:${x.total ? clamp((x.done / x.total) * 100, 0, 100) : 0}%;background:${c.bg}"></i></span><span class="tp-n"><b>${x.done}</b>/${x.total}</span></div>`).join('')}</div>`;
+  }).join('')}<p class="fine">Tick each ${partWord(sps[0], false)} of a paper as you finish it. A ${partWord(sps[0], false)} counts as its share of the paper, and the paper counts as done, including on the calendar, once every ${partWord(sps[0], false)} is ticked.</p></div>`;
 }
 
 function afterLibRender(root) {
@@ -928,7 +935,7 @@ function formHTML(key) {
       <label class="fld"><span>Out of</span><input name="tot" inputmode="decimal" autocomplete="off" value="${tot}"></label>
       <output class="mf-pct" aria-live="polite">${pct}</output>
     </div>
-    ${partsOf(k.sp) ? `<fieldset class="mf-parts"><legend>Sections done</legend>${partsOf(k.sp).map((x) => `<label class="chk"><input type="checkbox" name="part" value="${x.id}" ${!r || partsDone(key).includes(x.id) ? 'checked' : ''}><span>${esc(x.name)}</span></label>`).join('')}</fieldset>` : ''}
+    ${partsOf(k.sp) ? `<fieldset class="mf-parts"><legend>${capFirst(partWord(k.sp))} done</legend>${partsOf(k.sp).map((x) => `<label class="chk"><input type="checkbox" name="part" value="${x.id}" ${!r || partsDone(key).includes(x.id) ? 'checked' : ''}><span>${esc(x.name)}</span></label>`).join('')}</fieldset>` : ''}
     <p class="mf-err" hidden></p>
     <div class="mf-date">
       <label class="chk"><input type="checkbox" name="link" ${linked ? 'checked' : ''}><span>Count toward a day</span></label>
@@ -2423,7 +2430,7 @@ document.addEventListener('click', (ev) => {
       const k = parseKey(d.key), P = partsOf(k.sp);
       const name = P.find((x) => x.id === d.part).short;
       commit();
-      toast(got.length === P.length ? `${compCode(k.s, k.p, k.v)} done: every section ticked.` : got.includes(d.part) ? `${name} ticked on ${compCode(k.s, k.p, k.v)}.` : `${name} unticked on ${compCode(k.s, k.p, k.v)}.`);
+      toast(got.length === P.length ? `${paperName(d.key)} done: every ${partWord(k.sp, false)} ticked.` : `${name} ${got.includes(d.part) ? 'ticked' : 'unticked'} on ${paperName(d.key)}.`);
       break;
     }
     case 'paper-remove':
@@ -2694,12 +2701,12 @@ function submitPaperForm(f) {
   const k = parseKey(key);
   const P = partsOf(k.sp);
   const parts = P ? [...f.querySelectorAll('input[name="part"]:checked')].map((i) => i.value) : null;
-  if (P && !parts.length) return fail('Tick the sections you’ve done.');
+  if (P && !parts.length) return fail(`Tick the ${partWord(k.sp)} you’ve done.`);
   const isNew = savePaper(key, { obt, tot, date, parts });
   ui.form = null;
   commit();
   const whole = !P || parts.length === P.length;
-  toast(!whole ? `${compCode(k.s, k.p, k.v)}: ${P.filter((x) => parts.includes(x.id)).map((x) => x.short).join(', ')} done.`
+  toast(!whole ? `${paperName(key)}: ${P.filter((x) => parts.includes(x.id)).map((x) => x.short).join(', ')} done.`
     : isNew ? `${compCode(k.s, k.p, k.v)} marked done${date ? `, counted on ${fmtDate(date, 'dm')}` : ''}.` : 'Saved.');
 }
 

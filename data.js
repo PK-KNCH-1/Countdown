@@ -86,7 +86,20 @@ const PAPER_PARTS = {
     { id: 'ss', name: 'Spreadsheets', short: 'Spreadsheet' },
     { id: 'web', name: 'Website authoring', short: 'Website' },
   ],
+  // Tamil Paper 1 (Composition): Section A is question 1 (a)–(c), Section B is question 2 (a)–(d).
+  // The exam asks for one of each; practising them all gives seven pieces, written one at a time.
+  tamil_p1: [
+    { id: '1a', name: 'Section A 1(a)', short: '1a' },
+    { id: '1b', name: 'Section A 1(b)', short: '1b' },
+    { id: '1c', name: 'Section A 1(c)', short: '1c' },
+    { id: '2a', name: 'Section B 2(a)', short: '2a' },
+    { id: '2b', name: 'Section B 2(b)', short: '2b' },
+    { id: '2c', name: 'Section B 2(c)', short: '2c' },
+    { id: '2d', name: 'Section B 2(d)', short: '2d' },
+  ],
 };
+/* What one part is called, where it isn't a section. */
+const PART_WORD = { tamil_p1: 'question' };
 
 /* The official final timetable, Zone 4 (India), Feb/March 2027. */
 const EXAMS = [
