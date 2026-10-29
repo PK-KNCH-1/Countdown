@@ -745,9 +745,17 @@ function revisionTile() {
     return `<button class="wt-subj wt-rsubj" data-act="rev-subj" data-s="${s.id}" aria-label="${esc(`${s.name}: ${st.done} of ${st.total} units revised, ${st.part} partly. Open its units.`)}">
       <span class="wt-code">${s.code}</span>${revBar(st, col(s.id).bg)}<span class="wt-pct">${st.done}/${st.total}</span></button>`;
   }).join('');
-  return `<section class="wt wt-full wt-rev" data-act="stats-open" data-v="revision" aria-label="Revision. Open the units.">${tileHead('Revision', 'data-act="stats-open" data-v="revision"')}
-    <p class="rev-sum"><b>${T.done}</b> of ${T.total} units revised${T.part ? `, <b>${T.part}</b> partly` : ''}</p>
-    ${revBar(T, 'var(--accent)')}
+  // Laid out like the Progress tile (ring, three numbers, a bar per subject), and beside it on wide screens.
+  const pct = T.total ? (T.done / T.total) * 100 : 0;
+  return `<section class="wt wt-rev" data-act="stats-open" data-v="revision" aria-label="Revision. Open the units.">${tileHead('Revision', 'data-act="stats-open" data-v="revision"')}
+    <div class="wt-prog">
+      <div class="ring-wrap ring-sm">${ringSVG(T.total ? T.done / T.total : 0, 76, 8, `${pct.toFixed(1)} percent of units revised`)}<div class="ring-txt"><b>${pct.toFixed(1)}%</b></div></div>
+      <dl class="wt-kv">
+        <div><dt>Revised</dt><dd>${T.done}<small>/${T.total}</small></dd></div>
+        <div><dt>Partly</dt><dd>${T.part}</dd></div>
+        <div><dt>Not yet</dt><dd>${T.todo}</dd></div>
+      </dl>
+    </div>
     <div class="wt-subjs">${rows}</div>
   </section>`;
 }
