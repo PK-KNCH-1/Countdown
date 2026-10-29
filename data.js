@@ -156,3 +156,105 @@ const SCHOOL_EXAMS = [
 /* Calendar range shown in the app (inclusive months). */
 const CAL_START = { y: 2026, m: 8 };  // September 2026 (0-based month)
 const CAL_END = { y: 2027, m: 3 };    // April 2027
+
+/* Revision tracker: each subject's units, in groups ({ g: heading, u: [id, name, number shown] }).
+   Physics, Chemistry, Biology and Maths follow the chapters of the revision notes (the same chapters
+   as the quiz); Economics (0455, 2027–2029), ICT (0417, 2026–2028), English (0500, 2027–2029) and
+   Tamil (3226) follow their syllabuses. Ids are stored with each unit's status, so never reuse one. */
+const UNITS = {
+  bio: [{ g: '', u: [
+    ['1', 'Characteristics and classification of living organisms'], ['2', 'Cells'], ['3', 'Movement into and out of cells'],
+    ['4', 'Biological molecules'], ['5', 'Enzymes'], ['6', 'Plant nutrition'], ['7', 'Human nutrition'],
+    ['8', 'Transport in plants'], ['9', 'Transport in animals'], ['10', 'Diseases and immunity'],
+    ['11', 'Respiration and gas exchange'], ['12', 'Coordination and response'], ['13', 'Excretion and homeostasis'],
+    ['14', 'Reproduction in plants'], ['15', 'Reproduction in humans'], ['16', 'Chromosomes, genes and proteins'],
+    ['17', 'Variation and selection (and drugs)'], ['18', 'Organisms and their environment'],
+    ['19', 'Human influences on ecosystems'], ['20', 'Biotechnology and genetic modification'],
+  ] }],
+  chem: [{ g: '', u: [
+    ['1', 'States of matter'], ['2', 'Atomic structure'], ['3', 'Chemical bonding'], ['4', 'Chemical formulae and equations'],
+    ['5', 'Chemical calculations'], ['6', 'Electrochemistry'], ['7', 'Chemical energetics'], ['8', 'Rates of reaction'],
+    ['9', 'Reversible reactions and equilibrium'], ['10', 'Redox reactions'], ['11', 'Acids and bases'],
+    ['12', 'Preparation of salts'], ['13', 'The Periodic Table'], ['14', 'Metallic elements and alloys'],
+    ['15', 'Reactivity of metals'], ['16', 'Extraction and corrosion of metals'], ['17', 'Chemistry of our environment'],
+    ['18', 'Introduction to organic chemistry'], ['19', 'Reactions of organic compounds'], ['20', 'Petrochemicals and polymers'],
+    ['21', 'Experimental design and separation techniques'], ['22', 'Chemical analysis'],
+  ] }],
+  phys: [{ g: '', u: [
+    ['1', 'Making measurements'], ['2', 'Describing motion'], ['3', 'Forces and motion'], ['4', 'Turning effects of forces'],
+    ['5', 'Forces and matter'], ['6', 'Energy stores and transfers'], ['7', 'Energy resources'], ['8', 'Work and power'],
+    ['9', 'The kinetic particle model of matter'], ['10', 'Thermal properties of matter'], ['11', 'Thermal energy transfers'],
+    ['12', 'Sound'], ['13', 'Light'], ['14', 'Properties of waves'], ['15', 'The electromagnetic spectrum'],
+    ['16', 'Magnetism'], ['17', 'Static electricity'], ['18', 'Electrical quantities'],
+    ['19', 'Electric circuits and electrical safety'], ['20', 'Electromagnetic forces'], ['21', 'Electromagnetic induction'],
+    ['22', 'The nuclear atom'], ['23', 'Radioactivity'], ['24', 'Earth and the Solar System'], ['25', 'Stars and the Universe'],
+  ] }],
+  ict: [
+    { g: 'Theory (Paper 1)', u: [
+      ['1', 'Types and components of computer systems'], ['2', 'Input and output devices'], ['3', 'Storage devices and media'],
+      ['4', 'Networks and the effects of using them'], ['5', 'The effects of using IT'], ['6', 'ICT applications'],
+      ['7', 'The systems life cycle'], ['8', 'Safety and security'], ['9', 'Audience'], ['10', 'Communication'],
+    ] },
+    { g: 'Practical skills (Papers 2 and 3)', u: [
+      ['11', 'File management'], ['12', 'Images'], ['13', 'Layout'], ['14', 'Styles'], ['15', 'Proofing'],
+      ['16', 'Graphs and charts'], ['17', 'Document production'], ['18', 'Databases'], ['19', 'Presentations'],
+      ['20', 'Spreadsheets'], ['21', 'Website authoring'],
+    ] },
+  ],
+  maths: [{ g: '', u: [
+    ['1-2', 'Number', '1–2'], ['3', 'Using number'], ['4', 'Angles and bearings'], ['5', 'Triangles, quadrilaterals and polygons'],
+    ['6', 'Indices, standard form and surds'], ['7', 'Introduction to algebra'], ['8', 'Simultaneous linear equations'],
+    ['9', 'Symmetry, congruency and similarity'], ['10', 'Pythagoras’ theorem'], ['11', 'Coordinate geometry'],
+    ['12', 'Mensuration'], ['13', 'Quadratic equations'], ['14', 'Functions 1'], ['15', 'Trigonometry'],
+    ['16', 'Circle properties'], ['17', 'Vectors and transformations'], ['18', 'Sets'], ['19', 'Descriptive statistics'],
+    ['20', 'Cumulative frequency diagrams and linear regression'], ['21', 'Probability'], ['22', 'Sequences'],
+    ['23', 'Functions 2'], ['24', 'Modelling'],
+  ] }],
+  econ: [
+    { g: '1 The basic economic problem', u: [
+      ['1.1', 'The nature of the basic economic problem'], ['1.2', 'Factors of production'], ['1.3', 'Opportunity cost'],
+      ['1.4', 'Production possibility curve (PPC) diagrams'],
+    ] },
+    { g: '2 The allocation of resources', u: [
+      ['2.1', 'The role of markets in allocating resources'], ['2.2', 'Demand'], ['2.3', 'Supply'], ['2.4', 'Price determination'],
+      ['2.5', 'Price changes'], ['2.6', 'Price elasticity of demand (PED)'], ['2.7', 'Price elasticity of supply (PES)'],
+      ['2.8', 'Market economic system'], ['2.9', 'Market failure'], ['2.10', 'Mixed economic system'],
+    ] },
+    { g: '3 Microeconomic decision-makers', u: [
+      ['3.1', 'Money and banking'], ['3.2', 'Households'], ['3.3', 'Workers'], ['3.4', 'Firms'], ['3.5', 'Firms and production'],
+      ['3.6', 'Firms’ costs, revenue and objectives'], ['3.7', 'Types of markets'],
+    ] },
+    { g: '4 Government and the macroeconomy', u: [
+      ['4.1', 'Government macroeconomic intervention'], ['4.2', 'Fiscal policy'], ['4.3', 'Monetary policy'],
+      ['4.4', 'Supply-side policy'], ['4.5', 'Economic growth'], ['4.6', 'Employment and unemployment'], ['4.7', 'Inflation'],
+    ] },
+    { g: '5 Economic development', u: [
+      ['5.1', 'Living standards'], ['5.2', 'Poverty'], ['5.3', 'Population'],
+      ['5.4', 'Differences in economic development between countries'],
+    ] },
+    { g: '6 International trade and globalisation', u: [
+      ['6.1', 'Specialisation and free trade'], ['6.2', 'Globalisation and trade restrictions'], ['6.3', 'Foreign exchange rates'],
+      ['6.4', 'Current account of the balance of payments'],
+    ] },
+  ],
+  tamil: [
+    { g: 'Paper 1 Composition', u: [
+      ['p1-letter', 'Letter', ''], ['p1-report', 'Report or speech', ''], ['p1-dialogue', 'Dialogue', ''],
+      ['p1-narr', 'Narrative essay', ''], ['p1-desc', 'Descriptive essay', ''], ['p1-arg', 'Argumentative essay', ''],
+    ] },
+    { g: 'Paper 2 Translation and reading comprehension', u: [
+      ['p2-t2e', 'Translation: Tamil into English', ''], ['p2-e2t', 'Translation: English into Tamil', ''],
+      ['p2-comp', 'Reading comprehension', ''],
+    ] },
+  ],
+  eng: [
+    { g: 'Paper 1 Reading', u: [
+      ['r1', 'Comprehension (Text A)', 'Q1'], ['r2', 'Summary, and attitudes and opinions (Text B)', 'Q2'],
+      ['r3', 'Short answers and language task (Text C)', 'Q3'], ['r4', 'Extended response (Text C)', 'Q4'],
+    ] },
+    { g: 'Paper 2 Directed writing and composition', u: [
+      ['w1', 'Directed writing: speech, letter, article or report', 'Q1'], ['w2', 'Descriptive composition', ''],
+      ['w3', 'Narrative composition', ''],
+    ] },
+  ],
+};

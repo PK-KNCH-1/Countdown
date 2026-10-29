@@ -144,7 +144,7 @@ const swatch = (sId, pId) => `<i class="sw" style="background:${col(sId, pId).bg
 
 /* ───────────── state, rebuilt from the record store ───────────── */
 
-let state = { entries: {}, targets: {}, lib: {}, goals: {}, tsel: {}, quiz: {}, qdays: {}, qset: null };
+let state = { entries: {}, targets: {}, lib: {}, goals: {}, tsel: {}, quiz: {}, qdays: {}, qset: null, units: {}, ucustom: {}, uhide: {} };
 let derived = { doneBySp: {}, keysBySp: {}, recentKey: null };
 
 function applyRec(k, v) {
@@ -157,6 +157,13 @@ function applyRec(k, v) {
   else if (kind === 'q') { if (v == null) delete state.quiz[rest]; else state.quiz[rest] = v; }
   else if (kind === 'qd') { if (v == null) delete state.qdays[rest]; else state.qdays[rest] = v; }
   else if (kind === 'qs') { if (rest === 'cfg') state.qset = v == null ? null : v; }
+  else if (kind === 'u' || kind === 'uc' || kind === 'uh') {
+    // Revision tracker: u/<subject>/<unit> status, uc/ units added by hand, uh/ units hidden from the list.
+    const j = rest.indexOf('/');
+    const sId = rest.slice(0, j), id = rest.slice(j + 1);
+    const bag = kind === 'u' ? state.units : kind === 'uc' ? state.ucustom : state.uhide;
+    if (v == null) { if (bag[sId]) delete bag[sId][id]; } else (bag[sId] = bag[sId] || {})[id] = v;
+  }
   else if (kind === 'e') {
     const j = rest.indexOf('/');
     const date = rest.slice(0, j), cell = rest.slice(j + 1);
@@ -172,7 +179,7 @@ function applyRec(k, v) {
 }
 
 function rebuild() {
-  state = { entries: {}, targets: {}, lib: {}, goals: {}, tsel: {}, quiz: {}, qdays: {}, qset: null };
+  state = { entries: {}, targets: {}, lib: {}, goals: {}, tsel: {}, quiz: {}, qdays: {}, qset: null, units: {}, ucustom: {}, uhide: {} };
   for (const [k, r] of Object.entries(Store.rec)) if (r && r.v !== null) applyRec(k, r.v);
   derive();
 }
@@ -429,7 +436,8 @@ const ui = {
   cal: { y: null, m: null, pick: null, armed: null },
   weekOff: 0,
   goals: { draft: null, open: null, archive: false },
-  statsView: null,            // null (dashboard) | 'subjects' | 'overview' | 'activity' | 'exams'
+  statsView: null,            // null (dashboard) | 'school' | 'revision' | 'subjects' | 'overview' | 'activity' | 'exams'
+  rev: { s: null, edit: false }, // Revision page: subject shown, editing the unit list
   gridModel: null,
   sheet: null,
   pendingRender: false,
@@ -501,6 +509,7 @@ function renderSyncPill() {
 
 const STATS_VIEWS = {
   school: SCHOOL_EXAM.name,
+  revision: 'Revision',
   subjects: 'Subjects and papers',
   overview: 'Completion overview',
   activity: 'Calendar activity',
@@ -519,6 +528,7 @@ function renderStats() {
       : V === 'overview' ? overviewHTML()
         : V === 'activity' ? activityHTML()
           : V === 'school' ? schoolHTML()
+            : V === 'revision' ? revisionHTML()
             : examsHTML();
     el.innerHTML = `<div class="detail-head"><button class="back" data-act="stats-back"><span aria-hidden="true">‹</span> Stats</button><h2 class="h">${STATS_VIEWS[V]}</h2></div>
       <div class="detail${V === 'subjects' ? '' : ' detail-solo'}">${body}</div>`;
@@ -526,7 +536,7 @@ function renderStats() {
     return;
   }
   el.innerHTML = `${syncBannerHTML()}
-    <div class="dash">${[schoolTile(), progressTile(), goalsTile(), quizTile(), weekTile(), overviewTile(), examsTile()].join('')}</div>
+    <div class="dash">${[schoolTile(), progressTile(), revisionTile(), goalsTile(), quizTile(), weekTile(), overviewTile(), examsTile()].join('')}</div>
     ${PREVIEW ? '' : '<div class="print-row"><button class="btn small" data-act="print">Print or save as PDF</button></div>'}`;
 }
 
@@ -680,6 +690,111 @@ function examsTile() {
         <span class="t"><b>${esc(SUBJ[x.s].name)}</b> ${esc(x.title)}</span>
         <span class="n">${d === 0 ? 'Today' : `${d}<small> ${d === 1 ? 'day' : 'days'}</small>`}</span></li>`;
     }).join('')}</ul></section>`;
+}
+
+/* ── Revision tracker: every unit of every subject, Not yet → Partly → Revised ── */
+
+const UNIT_ST = { part: 'Partly', done: 'Revised' };
+/* A subject's units in their groups, with units added by hand last; hidden ones only when asked for. */
+function unitGroups(sId, hiddenOnly) {
+  const hide = state.uhide[sId] || {};
+  const groups = (UNITS[sId] || []).map((G) => ({
+    g: G.g,
+    u: G.u.map(([id, name, n]) => ({ id, name, n: n == null ? id : n })).filter((x) => (hiddenOnly ? hide[x.id] : !hide[x.id])),
+  }));
+  if (!hiddenOnly) {
+    const mine = Object.entries(state.ucustom[sId] || {}).sort((a, b) => (a[1].at || 0) - (b[1].at || 0))
+      .map(([id, r]) => ({ id, name: r.name, n: '', custom: true }));
+    groups.push({ g: 'Added by you', u: mine });
+  }
+  return groups.filter((G) => G.u.length);
+}
+const unitOf = (sId, id) => (state.units[sId] || {})[id] || null;
+function unitStats(sId) {
+  let total = 0, done = 0, part = 0;
+  for (const G of unitGroups(sId)) for (const x of G.u) {
+    total++;
+    const r = unitOf(sId, x.id);
+    if (r && r.s === 'done') done++; else if (r && r.s === 'part') part++;
+  }
+  return { total, done, part, todo: total - done - part };
+}
+function revTotals() {
+  const T = { total: 0, done: 0, part: 0 };
+  for (const s of SUBJECTS) { const st = unitStats(s.id); T.total += st.total; T.done += st.done; T.part += st.part; }
+  T.todo = T.total - T.done - T.part;
+  return T;
+}
+function cycleUnit(sId, id) {
+  const r = unitOf(sId, id);
+  const next = !r ? 'part' : r.s === 'part' ? 'done' : null;
+  setRec(`u/${sId}/${id}`, next ? { s: next, at: Date.now() } : null);
+  return next;
+}
+/* Revised in full colour, partly in stripes. */
+function revBar(st, color) {
+  const pc = (n) => (st.total ? clamp((n / st.total) * 100, 0, 100) : 0);
+  return `<span class="rbar" aria-hidden="true"><i class="rv" style="width:${pc(st.done)}%;background:${color}"></i><i class="rp" style="width:${pc(st.part)}%;--c:${color}"></i></span>`;
+}
+
+function revisionTile() {
+  const T = revTotals();
+  const rows = SUBJECTS.map((s) => {
+    const st = unitStats(s.id);
+    if (!st.total) return '';
+    return `<button class="wt-subj wt-rsubj" data-act="rev-subj" data-s="${s.id}" aria-label="${esc(`${s.name}: ${st.done} of ${st.total} units revised, ${st.part} partly. Open its units.`)}">
+      <span class="wt-code">${s.code}</span>${revBar(st, col(s.id).bg)}<span class="wt-pct">${st.done}/${st.total}</span></button>`;
+  }).join('');
+  return `<section class="wt wt-full wt-rev" data-act="stats-open" data-v="revision" aria-label="Revision. Open the units.">${tileHead('Revision', 'data-act="stats-open" data-v="revision"')}
+    <p class="rev-sum"><b>${T.done}</b> of ${T.total} units revised${T.part ? `, <b>${T.part}</b> partly` : ''}</p>
+    ${revBar(T, 'var(--accent)')}
+    <div class="wt-subjs">${rows}</div>
+  </section>`;
+}
+
+function unitRowHTML(sId, x) {
+  const r = unitOf(sId, x.id);
+  const st = r ? r.s : null;
+  const when = r && r.at ? fmtDate(iso(new Date(r.at)), 'dm') : '';
+  const label = st ? `${UNIT_ST[st]}${when ? `, ${when}` : ''}` : 'Not yet';
+  const num = x.n ? `<span class="un">${esc(x.n)}</span>` : '';
+  const nn = x.n ? '' : ' nonum';
+  if (ui.rev.edit) {
+    return `<li class="urow edit${nn}">${num}<span class="uname">${esc(x.name)}</span>
+      <button type="button" class="btn small" data-act="${x.custom ? 'unit-del' : 'unit-hide'}" data-s="${sId}" data-u="${x.id}">${x.custom ? 'Delete' : 'Hide'}</button></li>`;
+  }
+  return `<li><button type="button" class="urow${st ? ` ${st}` : ''}${nn}" data-act="unit" data-s="${sId}" data-u="${x.id}" aria-label="${esc(`${x.n ? `${x.n} ` : ''}${x.name}: ${label}. Tap to change.`)}">
+    <span class="ust${st ? ` ${st}` : ''}" aria-hidden="true"></span>${num}<span class="uname">${esc(x.name)}<small>${esc(label)}</small></span></button></li>`;
+}
+
+function revisionHTML() {
+  const R = ui.rev;
+  if (!R.s || !SUBJ[R.s]) R.s = SUBJ[LS.get('cd.revS', '')] ? LS.get('cd.revS', '') : SUBJECTS[0].id; // the subject last open on this device
+  const s = SUBJ[R.s], c = col(R.s);
+  const chips = SUBJECTS.map((x) => {
+    const st = unitStats(x.id);
+    return `<button type="button" class="rchip${x.id === R.s ? ' on' : ''}" data-act="rev-subj" data-s="${x.id}" aria-pressed="${x.id === R.s}" aria-label="${esc(`${x.name}, ${st.done} of ${st.total} revised`)}" style="--cc:${col(x.id).bg}"><b>${esc(x.code)}</b><small>${st.done}/${st.total}</small></button>`;
+  }).join('');
+  const st = unitStats(R.s);
+  const groups = unitGroups(R.s);
+  const list = groups.map((G) => `${G.g ? `<p class="ugroup">${esc(G.g)}</p>` : ''}<ul class="ulist">${G.u.map((x) => unitRowHTML(R.s, x)).join('')}</ul>`).join('');
+  let editor = '';
+  if (R.edit) {
+    const hidden = unitGroups(R.s, true).flatMap((G) => G.u);
+    editor = `<form class="uadd" data-form="unit-add" data-s="${R.s}" novalidate>
+        <label class="fld grow"><span>Add a unit</span><input name="name" maxlength="80" autocomplete="off" placeholder="Name of the unit or topic"></label>
+        <button class="btn primary" type="submit">Add</button><p class="mf-err" hidden></p></form>
+      ${hidden.length ? `<p class="ugroup">Hidden</p><ul class="ulist">${hidden.map((x) => `<li class="urow edit hid${x.n ? '' : ' nonum'}">${x.n ? `<span class="un">${esc(x.n)}</span>` : ''}<span class="uname">${esc(x.name)}</span><button type="button" class="btn small" data-act="unit-show" data-s="${R.s}" data-u="${x.id}">Show</button></li>`).join('')}</ul>` : ''}`;
+  }
+  return `<section class="block rev" style="--sc:${c.bg};--sf:${c.fg}">
+    <div class="rchips" role="group" aria-label="Subject">${chips}</div>
+    <div class="rhead"><h2 class="h">${esc(s.name)}</h2><button type="button" class="btn small" data-act="rev-edit" aria-pressed="${R.edit}">${R.edit ? 'Done' : 'Edit list'}</button></div>
+    <p class="rev-sum"><b>${st.done}</b> revised, <b>${st.part}</b> partly, <b>${st.todo}</b> not yet</p>
+    ${revBar(st, c.bg)}
+    <p class="fine">${R.edit ? 'Hide units that aren’t on your course, or add your own. Hidden units don’t count.' : 'Tap a unit to move it from Not yet to Partly to Revised. Tapping a revised unit starts it over.'}</p>
+    ${list || '<p class="fine">No units in this list yet.</p>'}
+    ${editor}
+  </section>`;
 }
 
 function schoolTile() {
@@ -2093,6 +2208,9 @@ function exportJSON() {
     quizSettings: state.qset,
     paperLibrary: state.lib,
     goals: Object.values(state.goals),
+    units: state.units,
+    customUnits: state.ucustom,
+    hiddenUnits: state.uhide,
     lastBackup: new Date().toISOString(),
     updatedAt: Store.lastU,
   };
@@ -2161,6 +2279,19 @@ function readImport(obj) {
     if (r.markedAt) rec.markedAt = Number(r.markedAt);
     recs[`p/${k}`] = rec;
   }
+  const unitId = (id) => typeof id === 'string' && /^[\w.-]{1,40}$/.test(id);
+  for (const [sId, m] of Object.entries(obj.units || {})) {
+    if (!SUBJ[sId] || !m || typeof m !== 'object') continue;
+    for (const [id, r] of Object.entries(m)) if (unitId(id) && r && (r.s === 'part' || r.s === 'done')) recs[`u/${sId}/${id}`] = { s: r.s, at: Number(r.at) || Date.now() };
+  }
+  for (const [sId, m] of Object.entries(obj.customUnits || {})) {
+    if (!SUBJ[sId] || !m || typeof m !== 'object') continue;
+    for (const [id, r] of Object.entries(m)) if (unitId(id) && r && typeof r.name === 'string' && r.name.trim()) recs[`uc/${sId}/${id}`] = { name: r.name.trim().slice(0, 80), at: Number(r.at) || Date.now() };
+  }
+  for (const [sId, m] of Object.entries(obj.hiddenUnits || {})) {
+    if (!SUBJ[sId] || !m || typeof m !== 'object') continue;
+    for (const [id, v] of Object.entries(m)) if (unitId(id) && v) recs[`uh/${sId}/${id}`] = true;
+  }
   for (const [id, r] of Object.entries(obj.quiz || {})) if (QZ.known(id) && r && typeof r === 'object') recs[`q/${id}`] = r;
   for (const [d, r] of Object.entries(obj.quizDays || {})) if (/^\d{4}-\d{2}-\d{2}$/.test(d) && r && typeof r === 'object') recs[`qd/${d}`] = r;
   if (obj.quizSettings && typeof obj.quizSettings === 'object') {
@@ -2177,13 +2308,13 @@ function readImport(obj) {
 }
 
 function importSheetHTML(S) {
-  const c = { e: 0, days: new Set(), t: 0, p: 0, g: 0 };
+  const c = { e: 0, days: new Set(), t: 0, p: 0, g: 0, u: 0 };
   for (const k of Object.keys(S.recs)) {
     const kind = k.split('/')[0];
     if (kind === 'e') { c.e++; c.days.add(k.split('/')[1]); } else if (kind in c) c[kind]++;
   }
   return `<div class="sheet-h"><h2 id="sheetTitle">Import backup</h2><button class="icon-btn" data-act="sheet-close" aria-label="Close">×</button></div>
-    <p>This file has <b>${plural(c.p, 'paper')}</b> in the Paper Library, <b>${plural(c.days.size, 'calendar day')}</b>, <b>${plural(c.t, 'target')}</b> and <b>${plural(c.g, 'goal')}</b>.</p>
+    <p>This file has <b>${plural(c.p, 'paper')}</b> in the Paper Library, <b>${plural(c.days.size, 'calendar day')}</b>, <b>${plural(c.t, 'target')}</b>, <b>${plural(c.g, 'goal')}</b>${c.u ? ` and <b>${plural(c.u, 'unit')}</b> marked in Revision` : ''}.</p>
     <ul class="actions">
       <li><button class="btn primary" data-act="import-merge">Merge with my data</button><span>Adds everything in the file. Where both have the same paper or day, the file wins. Nothing else is removed.</span></li>
       <li><button class="btn danger" data-act="import-replace">Replace all my data</button><span>Makes your data exactly match the file${Sync.key ? ', on every synced device' : ''}.</span></li>
@@ -2554,6 +2685,28 @@ document.addEventListener('click', (ev) => {
     case 'stats-open': openStatsView(d.v); break;
     case 'stats-back': closeStatsView(); break;
     case 'dash-subj': openLib(d.s); break;
+    case 'rev-subj':
+      ui.rev.s = d.s;
+      LS.set('cd.revS', d.s);
+      if (ui.statsView === 'revision') render(); else openStatsView('revision');
+      break;
+    case 'rev-edit': ui.rev.edit = !ui.rev.edit; render(); break;
+    case 'unit': {
+      const next = cycleUnit(d.s, d.u);
+      commit();
+      const name = (unitGroups(d.s).flatMap((G) => G.u).find((x) => x.id === d.u) || {}).name || 'Unit';
+      toast(`${name}: ${next ? UNIT_ST[next] : 'Not yet'}.`);
+      break;
+    }
+    case 'unit-hide': setRec(`uh/${d.s}/${d.u}`, true); commit(); break;
+    case 'unit-show': setRec(`uh/${d.s}/${d.u}`, null); commit(); break;
+    case 'unit-del':
+      confirmTap(el, () => {
+        setRec(`uc/${d.s}/${d.u}`, null);
+        setRec(`u/${d.s}/${d.u}`, null);
+        commit();
+      }, 'Tap again to delete');
+      break;
 
     /* Targets */
     case 't-step': {
@@ -2670,6 +2823,16 @@ document.addEventListener('submit', (ev) => {
   if (!f.dataset || !f.dataset.form) return;
   ev.preventDefault();
   if (f.dataset.form === 'paper') submitPaperForm(f);
+  else if (f.dataset.form === 'unit-add') {
+    const name = f.elements.namedItem('name').value.trim();
+    const err = f.querySelector('.mf-err');
+    if (!name) { err.textContent = 'Type the name of the unit.'; err.hidden = false; return; }
+    setRec(`uc/${f.dataset.s}/c${uid()}`, { name: name.slice(0, 80), at: Date.now() });
+    commit();
+    toast(`Added ${name}.`);
+    const i = document.querySelector('form[data-form="unit-add"] input[name="name"]');
+    if (i) i.focus();
+  }
   else if (f.dataset.form === 'goal') submitGoal(f);
   else if (f.dataset.form === 'connect') {
     const key = parseKeyFromLink(f.elements.namedItem('link').value);
