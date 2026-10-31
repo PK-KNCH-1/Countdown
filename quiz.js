@@ -4,7 +4,11 @@
    International Maths 0607). qn-phys.js, qn-chem.js, qn-bio.js and qn-maths.js are generated from those
    notes and register themselves with QZ.load(). This file holds the engine, the Chemistry tests deck
    (cation, anion and flame tests and the solubility rules, asked with pictures) and the written-definitions
-   section. qz-econ.js adds the Economics definitions.
+   section. qn-econ.js is generated the same way from the Economics 0455 notes.
+
+   Only pure-memory cards are included: definitions the syllabus asks for word for word, formulas, units and
+   values, laws and rules, chemical tests and equations, short facts and lists. Describing, explaining,
+   comparing and applying are left to past papers.
 
    Most cards are recall cards: read the question, answer it in your head or on paper, reveal the answer
    and mark yourself — knew it, partly, or didn't know. Scheduling is a Leitner system: each card sits in a
@@ -91,7 +95,7 @@ const QZ = (() => {
     phys: 'your Physics 0625 notes (2026–2028 syllabus)',
     bio: 'your Biology 0610 notes (2026–2028 syllabus)',
     maths: 'your International Maths 0607 notes (2025–2027 syllabus)',
-    econ: 'the Cambridge IGCSE Economics 0455 syllabus, 2027–2029',
+    econ: 'your Economics 0455 notes (2027–2029 syllabus)',
   };
   const TOPICS = {}; // topic id -> { name, s, hint }
   const CHAPTERS = {}; // subject -> { chapter number: [label, title] }
@@ -383,7 +387,7 @@ const QZ = (() => {
   const boldDef = (t) => t.replace(/\{([^}]+)\}/g, '<b>$1</b>');
   const plainDef = (t) => t.replace(/[{}]/g, '');
   const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
-  /* Economics (qz-econ.js) writes its definitions with key words in braces; each topic acts as a chapter. */
+  /* defs(): an older way to add definitions with key words in braces (each topic acts as a chapter); not used now. */
   function defs(s, topic, list) {
     const chs = CHAPTERS[s] || (CHAPTERS[s] = {});
     if (!chs[topic]) chs[topic] = [String(Object.keys(chs).length + 1), TOPICS[topic].name.replace(/^Definitions: /, '')];
@@ -619,12 +623,12 @@ function qzHomeHTML() {
     <details class="block qz-how"${state.qdays[todayISO()] || Object.keys(state.qdays).length > 3 ? '' : ' open'}>
       <summary>How to use it</summary>
       <ol>
-        <li><b>Answer before you look.</b> Say it out loud or write it down: a formula, a value, a list, a difference. Recalling it yourself is what makes it stick.</li>
+        <li><b>Answer before you look.</b> Say it out loud or write it down: a formula, a value, a law, a test result, a list. Every card is something you must know by heart; explaining and applying are for past papers.</li>
         <li><b>Show the answer and mark yourself honestly.</b> <i>Knew it</i> only if you had every key word or every part of the formula.</li>
         <li><b>Let the schedule do the rest.</b> Knew it: the card comes back later and later (3, 7, 14, 30 days). Partly: it comes back soon. Didn’t know: tomorrow, and once more at the end of today’s session.</li>
         <li><b>Little and every day</b> beats a lot once a week. Finish the day’s cards to keep your streak.</li>
       </ol>
-      <p class="fine">Every card comes from your revision notes. Definitions are in <b>Write definitions</b>, where you write them on paper and mark them yourself.</p>
+      <p class="fine">Every card comes from your revision notes. Definitions are in <b>Write definitions</b>: only the ones the syllabus asks you to learn word for word. Write them on paper and mark them yourself.</p>
     </details>
     <section class="block">
       <h3 class="h">Subjects</h3>

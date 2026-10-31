@@ -14,8 +14,8 @@ between devices through a small Supabase database.
 | `sync.js` | Local record store and cloud sync |
 | `app.js` | Everything you see and do: Stats, Paper Library, Calendar, Goals, Targets, Sync |
 | `quiz.js` | Quiz engine: daily recall (scheduling, self-marking, undo), written definitions, browse sheet, and the Chemistry picture deck (cation, anion and flame tests, solubility) |
-| `qn-phys.js`, `qn-chem.js`, `qn-bio.js`, `qn-maths.js` | Quiz decks generated from the revision notes: formulas, values, laws, describe-and-explain points, differences, experiments, tests, key points, and the definitions to write out |
-| `qz-econ.js` | Economics definitions (for the written-definitions section) |
+| `qn-phys.js`, `qn-chem.js`, `qn-bio.js`, `qn-maths.js` | Quiz decks generated from the revision notes — pure-memory cards only (formulas, units and values, laws and rules, tests and equations, short facts) and the definitions the syllabus asks for word for word |
+| `qn-econ.js` | Economics quiz deck: definitions, formulas and lists, generated from the Economics notes |
 | `katex/` | KaTeX stylesheet and fonts, used to display the maths formulas |
 | `config.js` | Supabase project URL and its public (publishable) key |
 | `sw.js` | Service worker that keeps the app usable offline |
