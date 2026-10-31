@@ -1,4 +1,4 @@
-/* Countdown — daily recall quiz and written definitions.
+/* Countdown — daily multiple-choice quiz and written definitions.
 
    Where the questions come from: the revision notes (Physics 0625, Chemistry 0620, Biology 0610,
    International Maths 0607). qn-phys.js, qn-chem.js, qn-bio.js and qn-maths.js are generated from those
@@ -10,11 +10,13 @@
    values, laws and rules, chemical tests and equations, short facts and lists. Describing, explaining,
    comparing and applying are left to past papers.
 
-   Most cards are recall cards: read the question, answer it in your head or on paper, reveal the answer
-   and mark yourself — knew it, partly, or didn't know. Scheduling is a Leitner system: each card sits in a
-   box 1–5. "Knew it" moves it up a box and further away (1, 3, 7, 14, 30 days); "partly" keeps its box and
-   brings it back sooner; "didn't know" sends it to box 1 for tomorrow and repeats it once at the end of
-   today's session. Definitions are written on paper, then marked the same three ways.
+   Every card is multiple choice and marked by the app. The wrong options are the notes' own wording with
+   one or two key words changed (written by hand per item, from the notes and the syllabus only), so the
+   card tests the exact words. Each definition the syllabus asks for word for word is also a card here, as
+   well as being written out by hand in Write definitions. Scheduling is a Leitner system: each card sits in
+   a box 1–5. Right moves it up a box and further away (1, 3, 7, 14, 30 days); wrong sends it to box 1 for
+   tomorrow and repeats it once at the end of today's session. Written definitions are marked by you:
+   correct, partly or wrong.
 
    Progress is stored as records q/<card or definition id> = { b box, d due date, f first seen, r right,
    p partly, w wrong, l last seen, g last mark 2/1/0 } and qd/<date> = { n, c, p, done }, so it syncs. */
@@ -363,16 +365,39 @@ const QZ = (() => {
 
   /* ── decks generated from the revision notes ──
      data = { chapters: { n: [label, title] }, topics: { id: [name, hint] },
-              cards: [[id, topic, chapter, question html, answer html, ext, hint]],
-              defs: [[id, chapter, term html, definition html, note html, ext]] } */
+              cards: [[id, topic, chapter, question html, answer html, ext, hint, mcq]],
+              defs: [[id, chapter, term html, definition html, note html, ext, mcq]],
+              tex: [rendered maths] (Maths only: each piece is stored once and written as \u0000n\u0000) }
+     mcq = [[prompt html, correct option html, [wrong option html, …], sets?], …]: one or more versions of
+     the question. Each time a card comes up, one version is picked and three of its wrong options, shuffled.
+     sets (when there are more than three wrong options) lists the groups of three that may be shown together:
+     groups where the right answer can't be found just by picking the words most options share.
+     Every definition with an mcq also becomes a card of the topic <s>-def ("Definitions (exact wording)"),
+     separate from writing it out in Write definitions. */
   function load(s, data) {
+    const T = data.tex;
+    const fill = T ? (h) => h.replace(/\u0000(\d+)\u0000/g, (_, i) => T[i]) : (h) => h;
     CHAPTERS[s] = { ...(CHAPTERS[s] || {}), ...data.chapters };
     for (const [t, [name, hint]] of Object.entries(data.topics)) TOPICS[t] = { name, hint, s };
-    for (const [id, topic, ch, q, a, ext, hint] of data.cards) {
-      const c = addCard(id, topic, null, { ch, ext: !!ext });
-      c.build = () => ({ type: 'recall', prompt: q, hint: hint || TOPICS[topic].hint || 'Recall', answer: a, explain: a });
+    const pick = (a) => a[Math.floor(Math.random() * a.length)];
+    const choose = (versions, answer) => () => {
+      const [p, right, wrong, sets] = pick(versions);
+      const three = sets ? pick(sets).map((i) => wrong[i]) : shuffle([...wrong]).slice(0, 3);
+      return { type: 'mcq', prompt: fill(p), answer, explain: answer, ...mcq(fill(right), three.map(fill)) };
+    };
+    for (const [id, topic, ch, q0, a0, ext, hint, versions] of data.cards) {
+      const q = fill(q0), a = fill(a0);
+      const c = addCard(id, topic, null, { ch, ext: !!ext, q, a });
+      c.build = versions && versions.length ? choose(versions, a)
+        : () => ({ type: 'recall', prompt: q, hint: hint || TOPICS[topic].hint || 'Recall', answer: a, explain: a });
     }
-    for (const [id, ch, term, def, note, ext] of data.defs) addDef({ id, s, ch, term, def, note, ext: !!ext });
+    for (const [id, ch, term, def, note, ext, versions] of data.defs) {
+      addDef({ id, s, ch, term, def, note, ext: !!ext });
+      if (versions && versions.length && TOPICS[`${s}-def`]) {
+        const c = addCard(`m-${id}`, `${s}-def`, null, { ch, ext: !!ext, q: term, a: def, def: true });
+        c.build = choose(versions, `<div class="qz-defans">${def}</div>${note ? `<div class="qn-more">${note}</div>` : ''}`);
+      }
+    }
   }
 
   /* ── definitions to write out by hand ── */
@@ -594,7 +619,7 @@ function renderQuiz() {
 function qzModeHTML(m) {
   return `<div class="view-head"><h2 class="h">Quiz</h2></div>
     <div class="qz-mode" role="tablist" aria-label="Quiz sections">
-      <button role="tab" aria-selected="${m === 'quiz'}" class="${m === 'quiz' ? 'on' : ''}" data-act="qz-mode" data-m="quiz">Daily recall</button>
+      <button role="tab" aria-selected="${m === 'quiz'}" class="${m === 'quiz' ? 'on' : ''}" data-act="qz-mode" data-m="quiz">Daily quiz</button>
       <button role="tab" aria-selected="${m === 'defs'}" class="${m === 'defs' ? 'on' : ''}" data-act="qz-mode" data-m="defs">Write definitions</button>
     </div>`;
 }
@@ -623,12 +648,12 @@ function qzHomeHTML() {
     <details class="block qz-how"${state.qdays[todayISO()] || Object.keys(state.qdays).length > 3 ? '' : ' open'}>
       <summary>How to use it</summary>
       <ol>
-        <li><b>Answer before you look.</b> Say it out loud or write it down: a formula, a value, a law, a test result, a list. Every card is something you must know by heart; explaining and applying are for past papers.</li>
-        <li><b>Show the answer and mark yourself honestly.</b> <i>Knew it</i> only if you had every key word or every part of the formula.</li>
-        <li><b>Let the schedule do the rest.</b> Knew it: the card comes back later and later (3, 7, 14, 30 days). Partly: it comes back soon. Didn’t know: tomorrow, and once more at the end of today’s session.</li>
-        <li><b>Little and every day</b> beats a lot once a week. Finish the day’s cards to keep your streak.</li>
+        <li><b>Read every option to the end.</b> The wrong ones are your notes’ wording with one or two key words changed, so the right answer is the one with exactly the right words: a definition, a formula, a value, a law, a test result, a list. Explaining and applying are for past papers.</li>
+        <li><b>Try to recall it first.</b> Say the answer in your head before you look at the options. Then picking the right one is a check, not a guess. Keys 1–4 choose an option; Enter goes on.</li>
+        <li><b>Look at what changed.</b> After you choose, the words that differ light up: green for the wording in your notes, struck out for the changed words. The full answer from your notes is underneath.</li>
+        <li><b>Let the schedule do the rest.</b> Right: the card comes back later and later (3, 7, 14, 30 days). Wrong: tomorrow, and once more at the end of today’s session. Little and every day beats a lot once a week.</li>
       </ol>
-      <p class="fine">Every card comes from your revision notes. Definitions are in <b>Write definitions</b>: only the ones the syllabus asks you to learn word for word. Write them on paper and mark them yourself.</p>
+      <p class="fine">Everything comes from your revision notes and syllabus. Each definition the syllabus asks you to learn word for word is here as a multiple-choice card, and in <b>Write definitions</b>, where you write it out on paper and mark it yourself. Doing both each day fixes the exact wording.</p>
     </details>
     <section class="block">
       <h3 class="h">Subjects</h3>
@@ -725,12 +750,12 @@ function qzSessionHTML(Q) {
     </div>
     ${Q.answered ? `<div class="qz-fb ${m.mistakes ? 'wrong' : 'right'}"><b>${m.mistakes ? `Matched with ${m.mistakes} mistake${m.mistakes === 1 ? '' : 's'}` : 'All matched first time'}</b><div class="qz-exp">${q.explain}</div></div>` : '<p class="fine">Tap an item on the left, then its match on the right.</p>'}`;
   } else {
-    body = `${q.visual ? `<div class="qz-visual">${q.visual}</div>` : ''}<div class="qz-opts">${q.options.map((o, i) => {
+    body = `${q.visual ? `<div class="qz-visual">${q.visual}</div>` : ''}<div class="qz-opts qn${Q.answered ? ' done' : ''}">${q.options.map((o, i) => {
       let cls = 'qz-opt';
       if (Q.answered) { if (o.correct) cls += ' right'; else if (i === Q.picked) cls += ' wrong'; }
       return `<button class="${cls}" data-act="qz-pick" data-i="${i}" ${Q.answered ? 'disabled' : ''}>${o.html}</button>`;
     }).join('')}</div>
-    ${Q.answered ? `<div class="qz-fb ${q.options[Q.picked].correct ? 'right' : 'wrong'}"><b>${q.options[Q.picked].correct ? 'Correct' : 'Not quite'}</b><div class="qz-exp">${q.explain}</div></div>` : ''}`;
+    ${Q.answered ? `<div class="qz-fb ${q.options[Q.picked].correct ? 'right' : 'wrong'}"><b>${q.options[Q.picked].correct ? 'Correct' : 'Not quite'}</b>${q.options.some((o) => /qz-x/.test(o.html)) ? '<p class="qz-key">Green: the wording in your notes. <s>Struck out</s>: the words that were changed.</p>' : ''}<div class="qz-exp qn">${q.explain}</div></div>` : ''}`;
   }
   const chName = card.ch ? `Ch ${QZ.chLabel(card.s, card.ch)} ${QZ.chTitle(card.s, card.ch)}` : '';
   const tag = item.relearn ? ' · one more look' : !rec ? ' · new' : '';
@@ -744,7 +769,7 @@ function qzSessionHTML(Q) {
       <p class="qz-topic"><i class="sw" style="background:${col(card.s).bg}" aria-hidden="true"></i>${esc(qzSubjName(card.s))} · ${esc(QZ.TOPICS[card.topic].name)}${tag}</p>
       ${chName ? `<p class="qz-chline">${esc(chName)}${card.ext ? ' <span class="qn-ext">EXT</span>' : ''}</p>` : ''}
       ${q.type === 'recall' ? `<p class="qz-hint">${esc(q.hint)}</p>` : ''}
-      <h3 class="qz-q${q.type === 'recall' ? ' qn' : ''}">${q.prompt}</h3>
+      <h3 class="qz-q qn">${q.prompt}</h3>
       ${body}
       ${Q.answered ? `<button class="btn primary qz-next" data-act="qz-next">${Q.i + 1 < total ? 'Next' : 'Finish'}</button>` : ''}
     </section>
@@ -763,7 +788,7 @@ function qzDoneHTML(Q) {
       <p class="fine">${part ? `${part} partly, ` : ''}${no ? `${no} not yet. ` : ''}${left ? `${left} still to do today.` : `Today’s quiz is done.${streak ? ` ${streak}-day streak.` : ''}`} Cards you didn’t know come back tomorrow.</p>
       <div class="btn-row">${left ? '<button class="btn primary" data-act="qz-start">Keep going</button>' : '<button class="btn" data-act="qz-more">Practise 10 more</button>'}<button class="btn" data-act="qz-home">Back to the quiz</button></div>
     </section>
-    ${review.length ? `<section class="block"><h3 class="h">Worth another look</h3><ul class="qz-review">${review.map((r) => `<li><p class="qz-rq qn">${r.prompt} <span class="qz-rtag ${r.g === 1 ? 'part' : 'no'}">${r.g === 1 ? 'partly' : 'didn’t know'}</span></p><div class="qz-ans qn">${r.explain}</div></li>`).join('')}</ul></section>` : ''}`;
+    ${review.length ? `<section class="block"><h3 class="h">Worth another look</h3><ul class="qz-review">${review.map((r) => `<li><p class="qz-rq qn">${r.prompt} <span class="qz-rtag ${r.g === 1 ? 'part' : 'no'}">${r.g === 1 ? 'partly' : 'missed'}</span></p><div class="qz-ans qn">${r.explain}</div></li>`).join('')}</ul></section>` : ''}`;
 }
 
 /* ───────────── rendering: written definitions ───────────── */
@@ -949,11 +974,11 @@ function qzSheetModalHTML(S) {
   if (ch === 'tables') content = qzChemTablesHTML();
   else if (!qzSubjHas(s)) content = qzDefsListHTML(s, [ch]);
   else {
-    const cards = QZ.CARDS.filter((c) => c.s === s && String(c.ch) === String(ch) && c.build && QZ.TOPICS[c.topic].hint !== 'Choose the answer');
+    const cards = QZ.CARDS.filter((c) => c.s === s && String(c.ch) === String(ch) && c.build && !c.def && QZ.TOPICS[c.topic].hint !== 'Choose the answer');
     const topics = [...new Set(cards.map((c) => c.topic))];
     const defs = QZ.defsOf(s).filter((d) => String(d.ch) === String(ch));
     content = `${defs.length ? `<h4 class="qb-h">Definitions</h4>${qzDefsListHTML(s, [ch])}` : ''}
-      ${topics.map((t) => `<h4 class="qb-h">${esc(QZ.TOPICS[t].name)}</h4><dl class="qb-list qn">${cards.filter((c) => c.topic === t).map((c) => { const q = c.build(); return `<div><dt>${q.prompt}</dt><dd>${q.answer}</dd></div>`; }).join('')}</dl>`).join('')}
+      ${topics.map((t) => `<h4 class="qb-h">${esc(QZ.TOPICS[t].name)}</h4><dl class="qb-list qn">${cards.filter((c) => c.topic === t).map((c) => { const q = c.q != null ? null : c.build(); return `<div><dt>${q ? q.prompt : c.q}</dt><dd>${q ? q.answer : c.a}</dd></div>`; }).join('')}</dl>`).join('')}
       ${s === 'chem' && String(ch) === '22' ? '<p class="fine">The cation, anion and flame tests with pictures are under <b>Test tables</b>.</p>' : ''}`;
   }
   const chips = [...extra, ...chs.map((x) => [x, `${QZ.chLabel(s, x)}`])];
@@ -1184,13 +1209,21 @@ function quizClick(el, act, d) {
   }
 }
 
-/* Keyboard: Space shows the answer; 1, 2, 3 mark it (didn't know, partly, knew it); U undoes. */
+/* Keyboard. Multiple choice: 1–4 pick an option, Enter goes on. Recall cards (none at the moment):
+   Space shows the answer; 1, 2, 3 mark it (didn't know, partly, knew it); U undoes. */
 document.addEventListener('keydown', (ev) => {
   if (typeof ui === 'undefined' || ui.tab !== 'quiz' || ui.sheet || ev.metaKey || ev.ctrlKey || ev.altKey) return;
   const Q = ui.qz;
-  if (!Q || !Q.active || !Q.q || Q.q.type !== 'recall') return;
+  if (!Q || !Q.active || !Q.q) return;
   const ae = document.activeElement;
   if (ae && /INPUT|TEXTAREA|SELECT/.test(ae.tagName)) return;
+  if (Q.q.type === 'mcq') {
+    const k = Number(ev.key);
+    if (!Q.answered && k >= 1 && k <= Q.q.options.length) { ev.preventDefault(); quizClick(null, 'qz-pick', { i: k - 1 }); return; }
+    if (Q.answered && ev.key === 'Enter' && !(ae && ae.tagName === 'BUTTON' && ae.dataset.act !== 'qz-pick')) { ev.preventDefault(); qzAdvance(); }
+    return;
+  }
+  if (Q.q.type !== 'recall') return;
   if (!Q.revealed && ev.key === ' ') { ev.preventDefault(); quizClick(null, 'qz-show', {}); return; }
   if (Q.revealed && ['1', '2', '3'].includes(ev.key)) { ev.preventDefault(); if (Q.queue[Q.i].relearn) qzAdvance(); else qzGradeRecall(Number(ev.key) - 1); return; }
   if ((ev.key === 'u' || ev.key === 'U') && Q.undo) { ev.preventDefault(); qzUndo(); }

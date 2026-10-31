@@ -409,6 +409,15 @@ body.qz-focus .hero { padding-bottom: 12px; }
 .qz-opt.wrong { border-color: var(--exam-ink); background: color-mix(in srgb, var(--exam-ink) 14%, var(--surface)); }
 .qz-opt:disabled { cursor: default; }
 .qz-opt:disabled:not(.right):not(.wrong) { opacity: 0.55; }
+/* multiple choice from the notes: after answering, the words that differ between the options light up */
+.qz-opts.done .qz-opt:disabled:not(.right):not(.wrong) { opacity: 0.8; }
+.qz-opts.done .qz-d { background: color-mix(in srgb, var(--ok) 24%, transparent); border-radius: 3px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ok) 24%, transparent); }
+.qz-opts.done .qz-x { background: color-mix(in srgb, var(--exam-ink) 16%, transparent); border-radius: 3px; text-decoration: line-through; text-decoration-thickness: 1.5px; text-decoration-color: var(--exam-ink); box-shadow: 0 0 0 1px color-mix(in srgb, var(--exam-ink) 16%, transparent); }
+.qz-fb .qz-key { margin: 0 0 8px; font-size: 12px; color: var(--ink-2); }
+.qz-fb .qz-key s { text-decoration-color: var(--exam-ink); }
+.qz-defans { padding: 6px 10px; border-left: 3px solid var(--qc, var(--accent)); background: var(--surface); border-radius: 0 6px 6px 0; font-weight: 550; }
+.qz-defans + .qn-more { margin-top: 8px; }
+.qz-opt .frac, .qz-opt .katex { vertical-align: middle; }
 .qz-fb { margin-top: 12px; padding: 10px 12px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface-2); font-size: 13.5px; }
 .qz-fb > b { display: block; margin-bottom: 4px; font-size: 14px; }
 .qz-fb.right > b { color: var(--ok); }

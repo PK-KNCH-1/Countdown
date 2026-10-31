@@ -13,8 +13,8 @@ between devices through a small Supabase database.
 | `data.js` | Exam data only: subjects, timetable, which past-paper variants exist |
 | `sync.js` | Local record store and cloud sync |
 | `app.js` | Everything you see and do: Stats, Paper Library, Calendar, Goals, Targets, Sync |
-| `quiz.js` | Quiz engine: daily recall (scheduling, self-marking, undo), written definitions, browse sheet, and the Chemistry picture deck (cation, anion and flame tests, solubility) |
-| `qn-phys.js`, `qn-chem.js`, `qn-bio.js`, `qn-maths.js` | Quiz decks generated from the revision notes — pure-memory cards only (formulas, units and values, laws and rules, tests and equations, short facts) and the definitions the syllabus asks for word for word |
+| `quiz.js` | Quiz engine: daily multiple-choice quiz (scheduling, marking), written definitions, browse sheet, and the Chemistry picture deck (cation, anion and flame tests, solubility) |
+| `qn-phys.js`, `qn-chem.js`, `qn-bio.js`, `qn-maths.js` | Quiz decks generated from the revision notes — pure-memory cards only (formulas, units and values, laws and rules, tests and equations, short facts) and the definitions the syllabus asks for word for word, each with its multiple-choice options |
 | `qn-econ.js` | Economics quiz deck: definitions, formulas and lists, generated from the Economics notes |
 | `katex/` | KaTeX stylesheet and fonts, used to display the maths formulas |
 | `config.js` | Supabase project URL and its public (publishable) key |
@@ -39,23 +39,26 @@ Without a link the app still works fully on one device, using browser storage.
 
 ## Quiz
 
-**Daily recall.** Every card comes from the revision notes for Physics 0625, Chemistry 0620, Biology 0610 and
-International Maths 0607: formulas (shown on their own in a box, with symbols and rearranged forms beside them),
-values, laws, describe-and-explain points, differences, experiments, tests and key points. You answer in your head
-or on paper, reveal the answer and mark yourself: *knew it*, *partly* or *didn't know*. Cards follow a Leitner
-schedule (1, 3, 7, 14, 30 days): knew it moves a card up a box, partly keeps its box and brings it back sooner,
-didn't know sends it back to tomorrow and repeats it once at the end of the session. New cards come chapter by
-chapter, subjects taking turns; a ★ on a chapter puts its new cards first. Subjects and types of card can be
-switched off, and any chapter or type can be practised on its own. Keyboard: Space shows the answer, 1/2/3 mark it,
-U undoes the last mark. The Chemistry picture deck (cation, anion and flame tests, solubility) is multiple choice.
+**Daily quiz.** Every card is multiple choice and comes from the revision notes for Physics 0625, Chemistry 0620,
+Biology 0610, International Maths 0607 and Economics 0455: the definitions the syllabus asks for word for word,
+formulas, units and values, laws and rules, tests and equations, short facts and lists. Explaining and applying are
+left to past papers. The right option is the notes' own wording; the wrong ones change one or two key words. They
+were written by hand for each item (from the notes and the syllabus only) and usually come as two changed words in
+every combination, so the answer can't be found by picking the wording most options share. After answering, the
+words that differ are highlighted (green: as in the notes; struck out: changed) and the full answer from the notes
+is shown. Long items have several versions (e.g. one per gas test), picked at random. Cards follow a Leitner
+schedule (1, 3, 7, 14, 30 days): right moves a card up a box, wrong sends it back to tomorrow and repeats it once
+at the end of the session. New cards come chapter by chapter, subjects and types of card taking turns; a ★ on a
+chapter puts its new cards first. Subjects and types of card can be switched off, and any chapter or type can be
+practised on its own. Keyboard: 1–4 choose an option, Enter goes on.
 
-**Write definitions.** The app lists the terms; you write the definitions on paper, then mark each one correct,
+**Write definitions.** The same definitions, written out by hand: the app lists the terms; you write the definitions on paper, then mark each one correct,
 partly or wrong against the notes. Marks are kept per definition and scheduled the same way, so wrong and partly
 ones come back first. *All my marks* shows every definition with its latest mark.
 
 Progress is stored as records `q/<id>` (box, due date, counts, last mark) and `qd/<date>`, and settings as
-`qs/cfg`, so it syncs between devices. The `qn-*.js` decks are generated from the notes; regenerate them rather
-than editing them by hand.
+`qs/cfg`, so it syncs between devices. The `qn-*.js` decks are generated from the notes and the hand-written option lists; regenerate them
+rather than editing them by hand.
 
 ## Moving data from the old app
 
