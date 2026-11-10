@@ -4,11 +4,12 @@
    International Maths 0607). qn-phys.js, qn-chem.js, qn-bio.js and qn-maths.js are generated from those
    notes and register themselves with QZ.load(). This file holds the engine, the Chemistry tests deck
    (cation, anion and flame tests and the solubility rules, asked with pictures) and the written-definitions
-   section. qn-econ.js is generated the same way from the Economics 0455 notes.
+   section. qn-econ.js and qn-ict.js are generated the same way from the Economics 0455 and ICT 0417 notes.
 
    Only pure-memory cards are included: definitions the syllabus asks for word for word, formulas, units and
-   values, laws and rules, chemical tests and equations, short facts and lists. Describing, explaining,
-   comparing and applying are left to past papers.
+   values, laws and rules, chemical tests and equations, short facts, features and lists the syllabus names,
+   and ICT syntax. Describing, explaining, comparing, applying, practical technique and anything outside the
+   syllabus are left to past papers (the generator's drop list says why each left-out card went).
 
    Every card is multiple choice and marked by the app. The wrong options are the notes' own wording with
    one or two key words changed (written by hand per item, from the notes and the syllabus only), so the
@@ -91,13 +92,14 @@ const QZ = (() => {
   ];
 
   /* Subjects in the quiz, in the order they're shown. Names and colours come from data.js (SUBJ). */
-  const SUBJ_ORDER = ['phys', 'chem', 'bio', 'maths', 'econ'];
+  const SUBJ_ORDER = ['phys', 'chem', 'bio', 'maths', 'econ', 'ict'];
   const SYLLABUS = {
     chem: 'your Chemistry 0620 notes (2026–2028 syllabus)',
     phys: 'your Physics 0625 notes (2026–2028 syllabus)',
     bio: 'your Biology 0610 notes (2026–2028 syllabus)',
     maths: 'your International Maths 0607 notes (2025–2027 syllabus)',
     econ: 'your Economics 0455 notes (2027–2029 syllabus)',
+    ict: 'your ICT 0417 notes (2026–2028 syllabus)',
   };
   const TOPICS = {}; // topic id -> { name, s, hint }
   const CHAPTERS = {}; // subject -> { chapter number: [label, title] }
